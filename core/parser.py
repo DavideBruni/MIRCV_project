@@ -34,7 +34,7 @@ class Parser:
         try:
             tokens,pid = self.tokenize(document)
             if filtering:
-                tokens = self.stopwords_filtering(self.stemmer(tokens),set(stopwords.words('english')))
+                tokens = self.stemmer(self.stopwords_filtering(tokens,set(stopwords.words('english'))))
         except Exception as e:
             print('Error')
         finally:
