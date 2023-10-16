@@ -1,22 +1,20 @@
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List
 
-from model.posting import Posting
+from core.indexing.model.posting import Posting
 
-class InvertedIndex:
+class PostingList:
 
+    partition = 1
     def __init__(self):
         self._index = defaultdict(list)
-        self.lexicon: Dict[List[str], int, int, int] = {}
-        self.document_table: Dict[int] = {}
-        self.last_doc_id = 0
+        self.lexicon: Dict[List[str], int, int, int] = {}       #TODO fare una classe a parte! Salvare df, idf
 
     def add_posting(self, term: str, docno: str, payload: int = None) -> None:
         """Adds a document to the posting list of a term."""
         if not self.document_table.get(docno):
-            self.last_doc_id = self.last_doc_id + 1
             self.document_table[docno] = self.last_doc_id
-        posting = Posting(self.document_table[docno], payload)
+        posting = Posting(docno, payload)
         self._index[term].append(posting)
 
     def get_postings(self, term: str) -> List[Posting]:
