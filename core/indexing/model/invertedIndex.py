@@ -3,7 +3,7 @@ from typing import Dict, List
 
 from core.indexing.model.posting import Posting
 
-class PostingList:
+class InvertedIndex:
 
     partition = 1
     def __init__(self):
@@ -26,6 +26,11 @@ class PostingList:
     def get_terms(self) -> List[str]:
         """Returns all unique terms in the index."""
         return self._index.keys()
+
+    def sort(self) -> None:
+        self._index = sorted(self._index.items(), key=lambda x: x[1])
+
+
 
     def write_to_file(self, filename: str) -> None:
         with open(filename, 'w') as file:

@@ -8,7 +8,7 @@ import psutil
 
 
 from core.parser import Parser
-from core.indexing.model.postingList import PostingList
+from core.indexing.model.invertedIndex import InvertedIndex
 
 
 def config() -> Tuple[str, bool]:
@@ -45,7 +45,7 @@ def main():
                 while not allDocProcessed:
                     tsv_text = TextIOWrapper(tsv_file, encoding='utf-8')
                     line = tsv_text.readline()
-                    index = PostingList()             # new index object
+                    index = InvertedIndex()             # new index object
                     while psutil.virtual_memory().available > memory_threshold:  # until the available memory is over the treshold
                         if line is None:        # read all the lines
                             allDocProcessed = True
@@ -57,7 +57,7 @@ def main():
                         for term in set(tokens):
                            index.add_posting(term=term, docno=docno, payload=tokens.count(term))
                         line = tsv_text.readline()
-                    # TODO sort index
+                    index.sort()
                     # TODO write to disk
                     del index                           # explicitly delete index from memory
                     gc.collect()                        # invoke garbage collector
