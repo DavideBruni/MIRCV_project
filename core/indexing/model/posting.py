@@ -3,5 +3,5 @@ from dataclasses import dataclass
 
 @dataclass
 class Posting:
-    doc_id: int
+    docno: str
     frequency: int

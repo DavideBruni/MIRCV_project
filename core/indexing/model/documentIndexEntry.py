@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class DocumentIndexEntry:
-    pid:int
+    docno:int
     doc_id:int
     doc_len:int
     mem_offset:int

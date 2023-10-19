@@ -5,8 +5,8 @@ from io import TextIOWrapper
 from typing import Tuple
 import psutil
 
-
-
+from core.indexing.model.lexicon import Lexicon
+from core.indexing.model.lexiconEntry import LexiconEntry
 from core.parser import Parser
 from core.indexing.model.invertedIndex import InvertedIndex
 
@@ -28,6 +28,7 @@ def main():
     total_memory = psutil.virtual_memory().total  # Get total memory
     memory_threshold = total_memory * 0.2  # Keep the 20% of memory free
     allDocProcessed = False
+    lexicon = Lexicon()
 
     # TODO da qualche parte
     # TODO //create new document index entry and add it to file
@@ -55,7 +56,16 @@ def main():
                             continue
                         docno, tokens = parser.parse_doc(line,filtering)
                         for term in set(tokens):
-                           index.add_posting(term=term, docno=docno, payload=tokens.count(term))
+                            index.add_posting(term=term, docno=docno, frequency=tokens.count(term))
+                            # update lexicon information
+                            if not lexicon.get_term(term):
+                                lexicon_entry = LexiconEntry(1, 0)
+                            else:
+                                lexicon_entry = lexicon[term]
+                                lexicon_entry.df = lexicon_entry.df + 1
+
+                            lexicon.add_term(term,lexicon_entry)
+
                         line = tsv_text.readline()
                     index.sort()
                     # TODO write to disk

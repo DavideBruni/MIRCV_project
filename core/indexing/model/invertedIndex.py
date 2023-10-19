@@ -8,13 +8,10 @@ class InvertedIndex:
     partition = 1
     def __init__(self):
         self._index = defaultdict(list)
-        self.lexicon: Dict[List[str], int, int, int] = {}       #TODO fare una classe a parte! Salvare df, idf
 
-    def add_posting(self, term: str, docno: str, payload: int = None) -> None:
+    def add_posting(self, term: str, docno: str, frequency: int = None) -> None:
         """Adds a document to the posting list of a term."""
-        if not self.document_table.get(docno):
-            self.document_table[docno] = self.last_doc_id
-        posting = Posting(docno, payload)
+        posting = Posting(docno, frequency)
         self._index[term].append(posting)
 
     def get_postings(self, term: str) -> List[Posting]:
@@ -38,6 +35,6 @@ class InvertedIndex:
                 postings = self.get_postings(term)
                 line = term
                 for posting in postings:
-                    line = line + ' ' + str(posting.doc_id) + ':' + str(posting.payload)
+                    line = line + ' ' + str(posting.docno) + ':' + str(posting.frequency)
                 line = line + '\n'
                 file.write(line)

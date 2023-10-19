@@ -29,7 +29,7 @@ class Parser:
         """Removes stopwords from a sequence of tokens."""
         return [token for token in tokens if token not in stop_words]
 
-    def parse_doc(self,document:str,filtering:bool=False) -> Tuple[int,List[str]]:
+    def parse_doc(self,document:str,filtering:bool=False) -> Tuple[str,List[str]]:
         """ Returns [a list of tokens given and ???] an input document,
             if filtering is true stemming and stopwords filtering are performed too """
 

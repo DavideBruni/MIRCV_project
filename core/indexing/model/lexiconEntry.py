@@ -3,8 +3,7 @@ from dataclasses import dataclass
 
 @dataclass
 class LexiconEntry:
-    term: str        # term
-    df: int          # document frequency
-    idf: int         # inverse document frequency
-    max_idf: int     # max idf value
-    max_tf:  int     # max tf value
+    df: int = 0         # document frequency
+    idf: int = 0        # inverse document frequency
+    # max_idf: int = 0    # max idf value
+    # max_tf:  int = 0    # max tf value
