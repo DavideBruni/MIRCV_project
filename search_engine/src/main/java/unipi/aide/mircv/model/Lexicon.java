@@ -12,16 +12,27 @@ public class Lexicon {
         entries = new ArrayList();
     }
 
-    public Lexicon getInstance(){
+    public static Lexicon getInstance(){
         if (instance == null)
             instance = new Lexicon();
         return instance;
+    }
+
+    public boolean contains(String token) {
+        return false;
+    }
+
+    public void add(String token) {
+    }
+
+    public void update(String token) {
     }
 
 
     private class LexiconEntry{
         private int df;
         private int idf;
+        private long offset;
 
         LexiconEntry(){}
     }
