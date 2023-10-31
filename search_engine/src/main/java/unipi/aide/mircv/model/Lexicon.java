@@ -1,15 +1,14 @@
 package unipi.aide.mircv.model;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public class Lexicon {
     private static Lexicon instance = null;
 
-    private List<LexiconEntry> entries = null;
+    private Map<String,LexiconEntry> entries = null;
 
     private Lexicon(){
-        entries = new ArrayList();
+        entries = new HashMap<>();
     }
 
     public static Lexicon getInstance(){
@@ -19,13 +18,27 @@ public class Lexicon {
     }
 
     public boolean contains(String token) {
-        return false;
+        return entries.containsKey(token);
     }
 
     public void add(String token) {
+        entries.put(token,new LexiconEntry());
     }
 
-    public void update(String token) {
+    public void updateDf(String token) {
+        entries.put(token, entries.get(token).updateDF());
+    }
+
+    public void updateDocIdOffset(int i) {
+        // TODO
+    }
+
+    public void updateFrequencyOffset(int i) {
+        // TODO
+    }
+
+    public void writeToDisk() {
+        // TODO
     }
 
 
@@ -33,7 +46,15 @@ public class Lexicon {
         private int df;
         private int idf;
         private long offset;
+        private int numBlocks = 1;
 
-        LexiconEntry(){}
+        LexiconEntry(){
+            df = 1;
+        }
+
+        LexiconEntry updateDF(){
+            df++;
+            return this;
+        }
     }
 }

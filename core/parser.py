@@ -3,7 +3,7 @@ import string
 from typing import Tuple, List
 
 from nltk.stem import PorterStemmer
-from nltk.corpus imp    ort stopwords
+from nltk.corpus import stopwords
 class Parser:
 
     def tokenize(self,text:str) -> Tuple[List[str],str]:
@@ -30,11 +30,11 @@ class Parser:
         return [token for token in tokens if token not in stop_words]
 
     def parse_doc(self,document:str,filtering:bool=False) -> Tuple[str,List[str]]:
-        """ Returns [a list of tokens given] an input document,
+        """ Returns a list of tokens given] an input document,
             if filtering is true stemming and stopwords filtering are performed too """
 
         def remove_invalid_characters(text):
-            # Utilizza una regex per rimuovere i byte non validi
+            # Uses a regex to remove invalid bytes
             cleaned_text = re.sub(r'[^\x00-\x7F]+', '', text)
             return cleaned_text
 

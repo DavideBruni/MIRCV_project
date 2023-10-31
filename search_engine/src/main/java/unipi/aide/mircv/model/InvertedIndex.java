@@ -1,6 +1,6 @@
 package unipi.aide.mircv.model;
 
-import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexExcpetion;
+import unipi.aide.mircv.exceptions.PidNotFoundException;
 import unipi.aide.mircv.parsing.Parser;
 
 import java.io.*;
@@ -15,9 +15,10 @@ public class InvertedIndex {
     private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
     private static long lastDocId = 0;
 
-    private boolean SPIMI(File tsvFile, boolean parse){
+    private boolean SPIMI(File tsvFile, boolean parse, boolean compressed){
         PostingList postingList = new PostingList();
         Lexicon lexicon = Lexicon.getInstance();
+        boolean allDocumentProcessed = false;
         while (Runtime.getRuntime().freeMemory() > MEMORY_THRESHOLD) { //build index until 80% of total memory is used
             // Create a BufferedReader to read the file line by line
             try (BufferedReader reader = new BufferedReader(new FileReader(tsvFile))) {
@@ -27,17 +28,15 @@ public class InvertedIndex {
                         continue;
                     }
 
-                    // TODO converti le getPid e getTokens in ParseDocument che restituisce un ParsedDocument
-
-                    // getting the pid of the document
-                    String pid = Parser.getPid(line);
-
                     // if flag is set, remove stopwords and perform stemming
-                    List<String> tokens = Parser.getTokens(line,parse);
+                    ParsedDocument parsedDocument = Parser.parseDocument(line, parse);
+
+                    String pid = parsedDocument.getPid();
+                    List<String> tokens = parsedDocument.getTokens();
 
                     int docLen = tokens.size();
 
-                    DocumentIndex.add(++lastDocId, pid, docLen);
+                    // TODO DocumentIndex.add(++lastDocId, pid, docLen);
 
                     //update collection statistics
                     CollectionStatistics.updateDocumentsLen(docLen);
@@ -48,25 +47,26 @@ public class InvertedIndex {
                         if(! lexicon.contains(token)){
                             lexicon.add(token);
                         }else{
-                            lexicon.update(token);
+                            lexicon.updateDf(token);
                         }
-                        postingList.add(pid, token, Collections.frequency(tokens,token));
+                        postingList.add(lastDocId, token, Collections.frequency(tokens,token));
                     }
                 }else{
-                    return true;
+                    allDocumentProcessed = true;
+                    break;
                     // TODO add print and log
                 }
             } catch (IOException e) {
                 e.printStackTrace();
-            } catch (UnableToAddDocumentIndexExcpetion e) {
-                // print log
-                lastDocId--;
-
+            } catch (PidNotFoundException e) {
+                throw new RuntimeException(e);
             }
         }
-        // sort dictionary
+        postingList.sort();
+        postingList.writeToDisk(compressed);
+        lexicon.writeToDisk();
 
-        return false;
+        return allDocumentProcessed;
     }
 
     private void Merge(){
@@ -74,9 +74,9 @@ public class InvertedIndex {
     }
 
 
-    public void createIndex(File tsvFile, boolean parse) {
+    public void createIndex(File tsvFile, boolean parse, boolean compressed) {
         while (! allDocumentProcessed) {
-            allDocumentProcessed = SPIMI(tsvFile, parse);
+            allDocumentProcessed = SPIMI(tsvFile, parse, compressed);
         }
         // write CollectionStatistics to the disk
     }

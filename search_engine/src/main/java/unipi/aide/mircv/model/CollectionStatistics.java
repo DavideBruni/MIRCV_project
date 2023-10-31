@@ -11,5 +11,6 @@ public class CollectionStatistics {
     private static final String COLLECTION_STATISTICS_PATH = "";  //Path to the collection size
 
     public static void updateDocumentsLen(int size) {
+        documentsLen += size;
     }
 }

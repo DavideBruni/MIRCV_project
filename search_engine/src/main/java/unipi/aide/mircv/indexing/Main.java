@@ -30,7 +30,7 @@ public class Main {
             while ((entry = tarIn.getNextTarEntry()) != null) {     //read each file of the tar.gz archive
                 if (entry.getName().equals(TSV_FILE_NAME)) {          // searching for the file with the name TSV_FILE_NAME
                     File TsvFile = new File(entry.getName());
-                    invertedIndex.createIndex(TsvFile);
+                    invertedIndex.createIndex(TsvFile, Boolean.parseBoolean(args[1]), Boolean.FALSE);
                 }
             }
         } catch (FileNotFoundException e) {
