@@ -2,7 +2,7 @@ package unipi.aide.mircv.model;
 
 public class CollectionStatistics {
 
-    private static long collectionSize;     // size of the collection
+    private static int collectionSize;     // size of the collection (number of documents)
 
     private static long lexiconSize;        // size of the lexicon
 
@@ -13,4 +13,10 @@ public class CollectionStatistics {
     public static void updateDocumentsLen(int size) {
         documentsLen += size;
     }
+
+    public static void updateCollectionSize() {
+        collectionSize++;
+    }
+
+    public static int getCollectionSize(){ return collectionSize;}
 }

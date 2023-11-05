@@ -1,24 +1,41 @@
 package unipi.aide.mircv.model;
 
+import unipi.aide.mircv.fileHelper.FileHelper;
+
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Lexicon {
-    private static Lexicon instance = null;
+    private static String TEMP_PATH ="data/temp/lexicon";
+    private static int NUM_FILE_WRITTEN = 0;
 
     private Map<String,LexiconEntry> entries = null;
 
-    private Lexicon(){
+    public Lexicon(){
         entries = new HashMap<>();
     }
 
-    public static Lexicon getInstance(){
-        if (instance == null)
-            instance = new Lexicon();
-        return instance;
+    private Lexicon(Map<String, LexiconEntry> map) {
+        entries = map;
+    }
+
+
+    public static List<Lexicon> getPartialLexicons() {
+        List<Lexicon> res = new ArrayList<>();
+        for(int i = 0; i<NUM_FILE_WRITTEN;i++){
+            res.add(readFromDisk(i));
+        }
+        return res;
     }
 
     public boolean contains(String token) {
         return entries.containsKey(token);
+    }
+
+    public LexiconEntry getEntry(String token) {
+        return entries.get(token);
     }
 
     public void add(String token) {
@@ -29,32 +46,98 @@ public class Lexicon {
         entries.put(token, entries.get(token).updateDF());
     }
 
-    public void updateDocIdOffset(int i) {
-        // TODO
+    public void updateDocIdOffset(String token, int offset) {
+        if (contains(token)) {
+            LexiconEntry tmp = entries.get(token);
+            tmp.setDocIdOffset(offset);
+            entries.put(token,tmp);
+        }
     }
 
-    public void updateFrequencyOffset(int i) {
-        // TODO
+    public void updateFrequencyOffset(String token, int offset) {
+        if (contains(token)) {
+            LexiconEntry tmp = entries.get(token);
+            tmp.setFrequencyOffset(offset);
+            entries.put(token,tmp);
+        }
+    }
+
+    public void updatedocIdSize(String token, int offset) {
+        if (contains(token)) {
+            LexiconEntry tmp = entries.get(token);
+            tmp.setDocIdSize(offset);
+            entries.put(token,tmp);
+        }
+    }
+
+    public void updatefrequencySize(String token, int offset) {
+        if (contains(token)) {
+            LexiconEntry tmp = entries.get(token);
+            tmp.setDocIdOffset(offset);
+            entries.put(token,tmp);
+        }
     }
 
     public void writeToDisk() {
-        // TODO
+        FileHelper.createDir(TEMP_PATH);
+        File file = new File(TEMP_PATH + "/part" + NUM_FILE_WRITTEN);
+        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file))) {
+            for (String key : entries.keySet()) {
+                int byteLength = key.getBytes().length;
+                dataOutputStream.writeInt(byteLength);
+                dataOutputStream.write(key.getBytes());
+                LexiconEntry tmp = entries.get(key);
+                dataOutputStream.writeInt(tmp.getDf());
+                dataOutputStream.writeDouble(tmp.getIdf());
+                dataOutputStream.writeInt(tmp.getDocIdOffset());
+                dataOutputStream.writeInt(tmp.getFrequencyOffset());
+                dataOutputStream.writeInt(tmp.getNumBlocks());
+            }
+            NUM_FILE_WRITTEN++;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
+    static Lexicon readFromDisk(int partition) {
+        int i = 0;
+        String fileName = TEMP_PATH + "/part"+partition;
+        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(fileName))) {
+            Map<String, LexiconEntry> lexicon = new HashMap<>();
+            while (true) {
+                try{
+                    int key_length = dataInputStream.readInt();
+                    String key = new String(dataInputStream.readNBytes(key_length), StandardCharsets.UTF_8);
+                    LexiconEntry tmp = new LexiconEntry();
+                    tmp.setDf(dataInputStream.readInt());
+                    tmp.setIdf(dataInputStream.readInt());
+                    tmp.setDocIdOffset(dataInputStream.readInt());
+                    tmp.setFrequencyOffset(dataInputStream.readInt());
+                    tmp.setNumBlocks(dataInputStream.readInt());
+                    lexicon.put(key,tmp);
 
-    private class LexiconEntry{
-        private int df;
-        private int idf;
-        private long offset;
-        private int numBlocks = 1;
-
-        LexiconEntry(){
-            df = 1;
+                }catch (EOFException eof){
+                    break;
+                }
+            }
+            lexicon = new LinkedHashMap<>(
+                    lexicon.entrySet()
+                            .stream()
+                            .sorted(Map.Entry.comparingByKey())
+                            .collect(
+                                    Collectors.toMap(
+                                            Map.Entry::getKey,
+                                            Map.Entry::getValue,
+                                            (e1, e2) -> e1, LinkedHashMap::new)
+                            )
+            );
+            return new Lexicon(lexicon);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
+    }
 
-        LexiconEntry updateDF(){
-            df++;
-            return this;
-        }
+    public void clear() {
+        entries = new HashMap<>();
     }
 }
