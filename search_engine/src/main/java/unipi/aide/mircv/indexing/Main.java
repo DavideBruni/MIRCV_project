@@ -18,9 +18,9 @@ public class Main {
             System.exit(-1);
         }
 
-        Path filePath = null;
+        Path filePath = Path.of(args[0]);
 
-        InvertedIndex invertedIndex = new InvertedIndex();
+        InvertedIndex invertedIndex;
 
 
         // Read from compressed file and automatic handle file closure
@@ -28,15 +28,17 @@ public class Main {
              TarArchiveInputStream tarIn = new TarArchiveInputStream(new GzipCompressorInputStream(fis))) {
             TarArchiveEntry entry;
             while ((entry = tarIn.getNextTarEntry()) != null) {     //read each file of the tar.gz archive
+                // if I have different files, the next if need to be changed!
                 if (entry.getName().equals(TSV_FILE_NAME)) {          // searching for the file with the name TSV_FILE_NAME
-                    File TsvFile = new File(entry.getName());
-                    invertedIndex.createIndex(TsvFile, Boolean.parseBoolean(args[1]), Boolean.FALSE);
+                    invertedIndex = new InvertedIndex(tarIn, Boolean.parseBoolean(args[1]), Boolean.FALSE);
                 }
             }
         } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
+            e.printStackTrace();
+            System.exit(-2);
         } catch (IOException e) {
             e.printStackTrace();
+            System.exit(-2);
         }
 
     }

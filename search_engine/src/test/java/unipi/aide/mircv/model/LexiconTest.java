@@ -1,82 +1,67 @@
 package unipi.aide.mircv.model;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
 
-import java.util.List;
-import java.util.Map;
+    public class LexiconTest {
 
-import static org.junit.Assert.*;
+        @Test
+        public void testReadWriteLexicon() {
+            Lexicon lexicon = new Lexicon();
 
-public class LexiconTest {
+            // Aggiungi alcune voci al lessico
+            lexicon.add("apple");
+            lexicon.add("banana");
+            lexicon.add("cherry");
 
-    private Lexicon lexicon;
+            // Scrivi il lessico su disco
+            lexicon.writeToDisk(true);
 
-    @Before
-    public void setUp() {
-        lexicon = Lexicon.getInstance();
-        lexicon.add("word1");
-        lexicon.add("word2");
-        lexicon.updateDf("word1");
-        lexicon.updateDf("word2");
-        lexicon.updateDocIdOffset("word1", 100);
-        lexicon.updateDocIdOffset("word2", 200);
-        lexicon.updateFrequencyOffset("word1", 1000);
-        lexicon.updateFrequencyOffset("word2", 2000);
-    }
+            // Leggi il lessico da disco
+            Lexicon readLexicon = Lexicon.readFromDisk(-1);
 
-    @Test
-    public void testContains() {
-        assertTrue(lexicon.contains("word1"));
-        assertTrue(lexicon.contains("word2"));
-        assertFalse(lexicon.contains("word3"));
-    }
+            // Verifica che le voci siano state correttamente scritte e lette
+            assertTrue(readLexicon.contains("apple"));
+            assertTrue(readLexicon.contains("banana"));
+            assertTrue(readLexicon.contains("cherry"));
 
-    @Test
-    public void testUpdateDf() {
-        assertEquals(2, lexicon.getEntry("word1").getDf());
-        assertEquals(2, lexicon.getEntry("word2").getDf());
-    }
-
-    @Test
-    public void testUpdateDocIdOffset() {
-        assertEquals(100, lexicon.getEntry("word1").getDocIdOffset());
-        assertEquals(200, lexicon.getEntry("word2").getDocIdOffset());
-    }
-
-    @Test
-    public void testUpdateFrequencyOffset() {
-        assertEquals(1000, lexicon.getEntry("word1").getFrequencyOffset());
-        assertEquals(2000, lexicon.getEntry("word2").getFrequencyOffset());
-    }
-
-    @Test
-    public void testWriteAndReadFromDisk() {
-        try {
-            lexicon.writeToDisk();
-
-            // Read the data from the written file
-            Map<String, List<LexiconEntry>> readLexicon = Lexicon.readFromDisk();
-
-            // assertEquals(lexicon.entries.size(), readLexicon.entries.size());
-
-            for (String key : readLexicon.keySet()) {
-                assertTrue(lexicon.contains(key));
-                LexiconEntry originalEntry = lexicon.getEntry(key);
-                LexiconEntry readEntry = readLexicon.get(key).get(0);
-
-                // Compare the values
-                assertEquals(originalEntry.getDf(), readEntry.getDf());
-                assertEquals(originalEntry.getIdf(), readEntry.getIdf());
-                assertEquals(originalEntry.getDocIdOffset(), readEntry.getDocIdOffset());
-                assertEquals(originalEntry.getFrequencyOffset(), readEntry.getFrequencyOffset());
-                assertEquals(originalEntry.getNumBlocks(), readEntry.getNumBlocks());
-            }
-        } catch (Exception e) {
-            fail("Exception occurred: " + e.getMessage());
-        } finally {
-            // TODO Clean up: Delete the temporary file
+            // Verifica che le voci abbiano valori corretti
+            LexiconEntry appleEntry = readLexicon.getEntry("apple");
+            assertNotNull(appleEntry);
+            assertEquals(1, appleEntry.getDf());
 
         }
+
+        @Test
+        public void testAddAndGetEntryAtPointer() {
+            Lexicon lexicon = new Lexicon();
+
+            // Aggiungi alcune voci al lessico utilizzando il metodo 'add'
+            LexiconEntry appleEntry = new LexiconEntry();
+            LexiconEntry bananaEntry = new LexiconEntry();
+            LexiconEntry cherryEntry = new LexiconEntry();
+            lexicon.add("apple", appleEntry);
+            lexicon.add("banana", bananaEntry);
+            lexicon.add("cherry", cherryEntry);
+
+            // Verifica che le voci siano state correttamente aggiunte
+            assertTrue(lexicon.contains("apple"));
+            assertTrue(lexicon.contains("banana"));
+            assertTrue(lexicon.contains("cherry"));
+
+            // Verifica che i riferimenti alle voci siano corretti
+            assertSame(appleEntry, lexicon.getEntry("apple"));
+            assertSame(bananaEntry, lexicon.getEntry("banana"));
+            assertSame(cherryEntry, lexicon.getEntry("cherry"));
+
+            // Test per il metodo 'getEntryAtPointer'
+            assertEquals("apple", lexicon.getEntryAtPointer(0));
+            assertEquals("banana", lexicon.getEntryAtPointer(1));
+            assertEquals("cherry", lexicon.getEntryAtPointer(2));
+
+            // Test per il comportamento quando il puntatore è fuori dai limiti
+            assertNull(lexicon.getEntryAtPointer(3));
+        }
     }
-}
+
+

@@ -11,7 +11,8 @@ public class DocumentIndex {
     private static final String FILE_PATH = "data/invertedIndex";
 
     public static void add(long docid, String docno, int docLen) throws UnableToAddDocumentIndexException {
-        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(FILE_PATH, true))) {
+        FileHelper.createDir(FILE_PATH);
+        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(FILE_PATH+"/documentIndex.dat", true))) {
             dataOutputStream.writeInt(Integer.parseInt(docno));   // Write docno as integer, then treated as a string, because in our collection pid are integers
             dataOutputStream.writeLong(docid);
             dataOutputStream.writeInt(docLen);
@@ -23,7 +24,7 @@ public class DocumentIndex {
 
     public static DocumentInfo retrieve(String docno) throws DocumentNotFoundException {
         FileHelper.createDir(FILE_PATH);
-        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(FILE_PATH+"/invertedIndex"))) {
+        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(FILE_PATH+"/documentIndex.dat"))) {
             while (dataInputStream.available() > 0) {
                 String storedDocno = String.valueOf(dataInputStream.readInt());
                 long docid = dataInputStream.readLong();

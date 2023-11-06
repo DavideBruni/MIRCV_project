@@ -1,5 +1,6 @@
 package unipi.aide.mircv.model;
 
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import unipi.aide.mircv.exceptions.PidNotFoundException;
 import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
 import unipi.aide.mircv.parsing.Parser;
@@ -9,21 +10,22 @@ import java.util.*;
 
 public class InvertedIndex {
 
-    private static final String LEXICON_PATH = "data/lexicon.dat";
     private static final String DOCUMENT_IDS_PATH = "data/document_ids.dat";
     private static final String FREQUENCY_PATH = "data/frequencies.dat";
+    private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
     private boolean allDocumentProcessed;
     private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
     private static long lastDocId = 0;
 
-    private void SPIMI(File tsvFile, boolean parse, boolean compressed){
+    private void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean compressed) throws IOException {
         PostingList postingList = new PostingList();
         Lexicon lexicon = new Lexicon();
-        boolean allDocumentProcessed = false;
-        while (!allDocumentProcessed){
-            while (Runtime.getRuntime().freeMemory() > MEMORY_THRESHOLD) { //build index until 80% of total memory is used
-                // Create a BufferedReader to read the file line by line
-                try (BufferedReader reader = new BufferedReader(new FileReader(tsvFile))) {
+        // Create a BufferedReader to read the file line by line
+        BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // non dentro il try catch perhè la funzione è chiamata dentro un try catch, se chiudo
+        // il flusso poi non posso scorrere un eventuale secondo file
+        try{
+            while (!allDocumentProcessed){
+                while (Runtime.getRuntime().freeMemory() > MEMORY_THRESHOLD) { //build index until 80% of total memory is used
                     String line;
                     if ((line = reader.readLine()) != null) {
                         if (line.isBlank()){             // if the line read is empty, skip it
@@ -59,18 +61,16 @@ public class InvertedIndex {
                         break;
                         // TODO add print and log
                     }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                } catch (PidNotFoundException | UnableToAddDocumentIndexException e) {
-                    throw new RuntimeException(e);
                 }
+                postingList.sort();
+                postingList.writeToDisk(compressed,lexicon);
+                lexicon.writeToDisk(false);
+                lexicon.clear();
+                postingList = new PostingList();
+                System.gc();
             }
-            postingList.sort();
-            postingList.writeToDisk(compressed,lexicon);
-            lexicon.writeToDisk();
-            lexicon.clear();
-            postingList = new PostingList();
-            System.gc();
+        }catch (PidNotFoundException | UnableToAddDocumentIndexException e) {
+            throw new RuntimeException(e);
         }
 
     }
@@ -86,21 +86,21 @@ public class InvertedIndex {
         //  2.4 se la posting list supera 2KB, allora fai più blocchi (usa gli skipping pointers e implementali)
         //  2.5 Scrivi su file e aggiorna gli offsett
         PostingList mergedPostingList = new PostingList();
+        Lexicon mergedLexicon = new Lexicon();
         try (DataOutputStream docStream = new DataOutputStream(new FileOutputStream(DOCUMENT_IDS_PATH));
-             DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(FREQUENCY_PATH));
-             DataOutputStream lexStream = new DataOutputStream(new FileOutputStream(LEXICON_PATH))){
+             DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(FREQUENCY_PATH))){
             List<Lexicon> partialLexicons= Lexicon.getPartialLexicons();
+
+            int offset = 0;
             int [] pointers = new int[partialLexicons.size()];          // for each partialLexicon, what is the term we get
             // trovare il token minimo --> trovare i partialLexicons
             while(true) {
+                LexiconEntry lexiconEntry = new LexiconEntry();
                 String token = findLowerToken(partialLexicons, pointers);
                 if (token == null)
                     break;
                 int df = 0;
                 double idf = 0;
-                int docIdOffset;
-                int frequencyOffset;
-                int numBlocks;
                 // recupero le posting list --> recupero le posting!
                 List<PostingList> postingLists = new ArrayList<>();
                 for (int i = 0; i < partialLexicons.size(); i++) {
@@ -113,22 +113,32 @@ public class InvertedIndex {
                         pointers[i]++;
                     }
                 }
+
+
                 // creo un'unica posting list
-                mergedPostingList.add(postingLists, token);
+                int postingsSize = mergedPostingList.add(postingLists, token);
                 //gestire la situazione blocchi
+                if (postingsSize > POSTING_SIZE_THRESHOLD){
+                    mergedPostingList.addSkipPointers(token,lexiconEntry,compressed); //if some error, it must return 1
+                }
 
                 // aggiorna l'entry del vocabolario
                 idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
+
+                lexiconEntry.setDf(df);
+                lexiconEntry.setIdf(idf);
                 // scrivere in docId, in frequency e lexicon
                 if (!compressed) {
-
+                    offset= mergedPostingList.writeToDiskNotCompressed(mergedLexicon,docStream,freqStream,token,offset);
                 }
+                mergedLexicon.add(token, lexiconEntry);
             }
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+        mergedLexicon.writeToDisk(true);
 
     }
 
@@ -139,20 +149,22 @@ public class InvertedIndex {
             String currentTerm = partialLexicons.get(i).getEntryAtPointer(pointers[i]);
             if (minTerm == null)
                minTerm=currentTerm;
-            else if(currentTerm.compareTo(minTerm) < 0)
+            else if (currentTerm == null) {
+                continue;
+            } else if(currentTerm.compareTo(minTerm) < 0)
                 minTerm=currentTerm;
         }
         return minTerm;
     }
 
 
-    public void createIndex(File tsvFile, boolean parse, boolean compressed) {
-        SPIMI(tsvFile, parse, compressed);
+    public InvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse, boolean compressed) throws IOException {
+        SPIMI(tarArchiveInputStream, parse, compressed);
         if(!allDocumentProcessed){
             //fai qualcosa
         }else{
             Merge(compressed);
         }
-        // write CollectionStatistics to the disk
+        CollectionStatistics.writeToDisk();
     }
 }

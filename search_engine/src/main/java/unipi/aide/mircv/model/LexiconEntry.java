@@ -8,6 +8,7 @@ public class LexiconEntry {
     private int docIdSize;
     private int frequencySize;
     private int numBlocks = 1;
+    private int skipPointerOffset;
 
     public LexiconEntry(){
         df = 1;
@@ -72,6 +73,17 @@ public class LexiconEntry {
 
     public void setFrequencySize(int frequencySize) {
         this.frequencySize = frequencySize;
+    }
+
+    public void setNumBlock(int numBlocks) {
+        this.numBlocks = numBlocks;
+    }
+
+
+
+    public void setSkipPointerOffset(int skipPointerOffset) {
+        this.skipPointerOffset=skipPointerOffset;
+
     }
 }
 

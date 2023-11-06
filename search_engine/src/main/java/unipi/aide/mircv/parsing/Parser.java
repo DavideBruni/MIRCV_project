@@ -72,7 +72,8 @@ public class Parser {
         for(String token : tokens){
             Matcher matcher = pattern.matcher(token);
             String cleanedText = matcher.replaceAll("");
-            cleanedTokens.add(cleanedText);
+            if (cleanedText.length() >= 2)
+                cleanedTokens.add(cleanedText);
         }
         return cleanedTokens;
     }
