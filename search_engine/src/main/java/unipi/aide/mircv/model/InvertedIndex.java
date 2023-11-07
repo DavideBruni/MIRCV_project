@@ -10,8 +10,8 @@ import java.util.*;
 
 public class InvertedIndex {
 
-    private static final String DOCUMENT_IDS_PATH = "data/document_ids.dat";
-    private static final String FREQUENCY_PATH = "data/frequencies.dat";
+    private static final String DOCUMENT_IDS_PATH = "data/invertedIndex/document_ids.dat";
+    private static final String FREQUENCY_PATH = "data/invertedIndex/frequencies.dat";
     private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
     private boolean allDocumentProcessed;
     private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
@@ -87,30 +87,37 @@ public class InvertedIndex {
         //  2.5 Scrivi su file e aggiorna gli offsett
         PostingList mergedPostingList = new PostingList();
         Lexicon mergedLexicon = new Lexicon();
+        DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
+        String[] lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
         try (DataOutputStream docStream = new DataOutputStream(new FileOutputStream(DOCUMENT_IDS_PATH));
              DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(FREQUENCY_PATH))){
-            List<Lexicon> partialLexicons= Lexicon.getPartialLexicons();
-
+            // leggo per tutti i partial, solo la prima entrata e la salvo in un array di LExiconEntries
+            // recupero il token minore
+            // merge: quello che faccio ora + rimuovo dall'array quelli già analizzati
+            // fine ciclo
+            // per gli indici dove il valore della entry è null, leggo una nuova entry  (nella lettura gestire il case EOF e lasciare a null)
+            // (nel confronto gestire il null pointer exception quando accedo al token dell'entry)
             int offset = 0;
-            int [] pointers = new int[partialLexicons.size()];          // for each partialLexicon, what is the term we get
             // trovare il token minimo --> trovare i partialLexicons
             while(true) {
                 LexiconEntry lexiconEntry = new LexiconEntry();
-                String token = findLowerToken(partialLexicons, pointers);
+                String token = findLowerToken(lowestTokens);
                 if (token == null)
                     break;
                 int df = 0;
-                double idf = 0;
+                double idf;
                 // recupero le posting list --> recupero le posting!
                 List<PostingList> postingLists = new ArrayList<>();
-                for (int i = 0; i < partialLexicons.size(); i++) {
-                    if (partialLexicons.get(i).contains(token)) {   // (o meglio quali partizioni contengono minTerm)
-                        df += partialLexicons.get(i).getEntry(token).getDf();
-                        Lexicon tmp = partialLexicons.get(i);           // creare la nuova entry e creare la nuova posting list
-                        postingLists.add(new PostingList().readFromDisk(token, i, tmp.getEntry(token).getDocIdOffset(),
-                                tmp.getEntry(token).getFrequencyOffset(), tmp.getEntry(token).getDocIdSize(),
-                                tmp.getEntry(token).getFrequencySize()));
-                        pointers[i]++;
+                for (int i = 0; i < lowestTokens.length; i++) {
+                    if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
+                        LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
+                        if(tmp != null) {
+                            df += tmp.getDf();
+                            postingLists.add(new PostingList().readFromDisk(token, i, tmp.getDocIdOffset(),
+                                    tmp.getFrequencyOffset(), tmp.getDocIdSize(),
+                                    tmp.getFrequencySize()));
+                            lowestTokens[i] = null;
+                        }
                     }
                 }
 
@@ -130,6 +137,9 @@ public class InvertedIndex {
                 // scrivere in docId, in frequency e lexicon
                 if (!compressed) {
                     offset= mergedPostingList.writeToDiskNotCompressed(mergedLexicon,docStream,freqStream,token,offset);
+                }else{
+                    // mergedPostingList.writeToDiskCompressed(mergedLexicon);
+
                 }
                 mergedLexicon.add(token, lexiconEntry);
             }
@@ -142,17 +152,15 @@ public class InvertedIndex {
 
     }
 
-    private String findLowerToken(List<Lexicon> partialLexicons, int [] pointers) throws IOException {
+    private String findLowerToken(String[] tokens){
         String minTerm = null;
-        for(int i=0; i< partialLexicons.size(); i++){
-            // gestire il caso in cui il pointer sia OutOfBoundExceptions
-            String currentTerm = partialLexicons.get(i).getEntryAtPointer(pointers[i]);
-            if (minTerm == null)
-               minTerm=currentTerm;
-            else if (currentTerm == null) {
-                continue;
-            } else if(currentTerm.compareTo(minTerm) < 0)
-                minTerm=currentTerm;
+        for(String token : tokens){
+            if (token != null) {
+                if (minTerm == null)
+                    minTerm = token;
+                else if (token.compareTo(minTerm) < 0)
+                    minTerm = token;
+            }
         }
         return minTerm;
     }

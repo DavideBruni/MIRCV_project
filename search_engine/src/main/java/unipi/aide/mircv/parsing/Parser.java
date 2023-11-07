@@ -84,7 +84,7 @@ public class Parser {
 
         Matcher matcher = pattern.matcher(text);
 
-        String pid = null;
+        String pid;
 
         if (matcher.find()) {
             pid = matcher.group(0).replace("\t", "");

@@ -3,15 +3,15 @@ package unipi.aide.mircv.model;
 import unipi.aide.mircv.fileHelper.FileHelper;
 
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class Lexicon {
-    private static final String FINAL_PATH = "data/lexicon.dat";
-    private static String TEMP_PATH ="data/temp/lexicon";
+    private static final String FINAL_PATH = "data/invertedIndex/lexicon.dat";
+    private static final String TEMP_DIR ="data/invertedIndex/temp/lexicon";
+    
     private static int NUM_FILE_WRITTEN = 0;
 
-    private Map<String,LexiconEntry> entries = null;
+    private Map<String,LexiconEntry> entries;
 
     public Lexicon(){
         entries = new TreeMap<>();
@@ -22,12 +22,56 @@ public class Lexicon {
     }
 
 
-    public static List<Lexicon> getPartialLexicons() {
-        List<Lexicon> res = new ArrayList<>();
-        for(int i = 0; i<NUM_FILE_WRITTEN;i++){
-            res.add(readFromDisk(i));
+
+    public static String[] getFirstTokens(DataInputStream[] partialLexiconStreams) {
+        return getTokens(new String[NUM_FILE_WRITTEN],partialLexiconStreams);
+    }
+
+    public static String[] getTokens(String[] tokens, DataInputStream[] partialLexiconStreams){
+        for(int i =0; i< tokens.length; i++){
+            if (tokens[i] == null && partialLexiconStreams[i] != null){
+                try {
+                    tokens[i] = partialLexiconStreams[i].readUTF();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+            }
         }
-        return res;
+        return tokens;
+    }
+
+
+    public static DataInputStream[] getStreams() {
+        DataInputStream[] dataInputStreams = new DataInputStream[NUM_FILE_WRITTEN];
+        for(int i=0; i<NUM_FILE_WRITTEN; i++){
+            try {
+                dataInputStreams[i] = new DataInputStream(new FileInputStream(TEMP_DIR + "/part" + i + ".dat"));
+            } catch (FileNotFoundException e) {
+                // print: impossibile aprire input stream per partition i, partialLexicon lost
+            }
+        }
+        return dataInputStreams;
+    }
+
+    public static LexiconEntry readEntry(DataInputStream partialLexiconStream) {
+        LexiconEntry lexiconEntry = new LexiconEntry();
+        try {
+            lexiconEntry.setDf(partialLexiconStream.readInt());
+            lexiconEntry.setIdf(partialLexiconStream.readDouble());
+            lexiconEntry.setDocIdOffset(partialLexiconStream.readInt());
+            lexiconEntry.setFrequencyOffset(partialLexiconStream.readInt());
+            lexiconEntry.setDocIdSize(partialLexiconStream.readInt());
+            lexiconEntry.setFrequencySize(partialLexiconStream.readInt());
+            lexiconEntry.setNumBlocks(partialLexiconStream.readInt());
+        } catch (EOFException eof){
+            eof.printStackTrace();
+            lexiconEntry = null;
+        } catch (IOException e) {
+            // print log error
+            lexiconEntry = null;
+        }
+        return lexiconEntry;
     }
 
     public boolean contains(String token) {
@@ -83,15 +127,13 @@ public class Lexicon {
         if(is_merged) {
             filename = FINAL_PATH;
         }else {
-            FileHelper.createDir(TEMP_PATH);
-            filename = TEMP_PATH + "/part" + NUM_FILE_WRITTEN;
+            FileHelper.createDir(TEMP_DIR);
+            filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
         try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file))) {
             for (String key : entries.keySet()) {
-                int byteLength = key.getBytes().length;
-                dataOutputStream.writeInt(byteLength);
-                dataOutputStream.write(key.getBytes());
+                dataOutputStream.writeUTF(key);
                 LexiconEntry tmp = entries.get(key);
                 dataOutputStream.writeInt(tmp.getDf());
                 dataOutputStream.writeDouble(tmp.getIdf());
@@ -114,14 +156,13 @@ public class Lexicon {
         if(partition == -1) {
             filename = FINAL_PATH;
         }else {
-            filename = TEMP_PATH + "/part" + i;
+            filename = TEMP_DIR + "/part" + i + ".dat";
         }
         try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(filename))) {
             Map<String, LexiconEntry> lexicon = new TreeMap<>();
             while (true) {
                 try{
-                    int key_length = dataInputStream.readInt();
-                    String key = new String(dataInputStream.readNBytes(key_length), StandardCharsets.UTF_8);
+                    String key = dataInputStream.readUTF();
                     LexiconEntry tmp = new LexiconEntry();
                     tmp.setDf(dataInputStream.readInt());
                     tmp.setIdf(dataInputStream.readDouble());
@@ -154,8 +195,7 @@ public class Lexicon {
         try{
             Set<String> keys = entries.keySet();
             List<String> keyList = new ArrayList<>(keys);
-            String key = keyList.get(pointer);
-            return key;
+            return keyList.get(pointer);
         }catch (IndexOutOfBoundsException e) {
             return null;
         }

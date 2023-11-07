@@ -9,36 +9,25 @@ import java.util.stream.Collectors;
 public class PostingList {
 
     Map<String, List<Posting>> postings;
-    private static String DOC_ID_PATH ="data/temp/docIds";
-    private static String FREQ_PATH ="data/temp/frequencies";
+    private static final String TEMP_DOC_ID_DIR ="data/invertedIndex/temp/docIds";
+    private static final String TEMP_FREQ_DIR ="data/invertedIndex/temp/frequencies";
     private static int NUM_FILE_WRITTEN = 0;
+
+    // prova di Elias-Fano
+    private static List<Integer> maxDocId = null;
 
     public PostingList() {
         this.postings = new HashMap<>();
     }
 
-    private PostingList(String token, List<Posting> postings_merged) {
-        this.postings = new HashMap<>();
-        postings.put(token,postings_merged);
-    }
-
-    public int add(List<PostingList> postingLists, String token) {
-        int posting_size = 12;
-        List<Posting> postings_merged = new ArrayList<>();
-        for(PostingList postingList : postingLists){        // per lo stesso token devo fare il merge in unica p.l
-            postings_merged.addAll(postingList.postings.get(token));
-        }
-        postings.put(token, postings_merged);               //ottenuta la pl, la associo al token
-        return postings_merged.size()*posting_size;
-    }
 
     public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int docIdSize, int frequencySize) {
         PostingList res = new PostingList();
-        try (DataInputStream docStream = new DataInputStream(new FileInputStream(DOC_ID_PATH + "/part"+partition));
-             DataInputStream freqStream = new DataInputStream(new FileInputStream(FREQ_PATH + "/part" + partition))) {
+        try (DataInputStream docStream = new DataInputStream(new FileInputStream(TEMP_DOC_ID_DIR + "/part"+partition+".dat"));
+             DataInputStream freqStream = new DataInputStream(new FileInputStream(TEMP_FREQ_DIR + "/part" + partition+".dat"))) {
             docStream.skipBytes(docIdOffset);
             freqStream.skipBytes(frequencyOffset);
-            for(int i = 0; i< docIdSize/8; i++) {
+            for(int i = 0; i< docIdSize/Long.BYTES; i++) {
                 try{
                     long docId = docStream.readLong();
                     int frq = freqStream.readInt();
@@ -58,7 +47,17 @@ public class PostingList {
         if (!postings.containsKey(token)){
             postings.put(token, new ArrayList<>());
         }
-        postings.get(token).add(new Posting(docId,frequency));
+        postings.get(token).add(new Posting(docId, frequency));
+    }
+
+    public int add(List<PostingList> postingLists, String token) {
+        int posting_size = 12;
+        List<Posting> postings_merged = new ArrayList<>();
+        for(PostingList postingList : postingLists){        // per lo stesso token devo fare il merge in unica p.l
+            postings_merged.addAll(postingList.postings.get(token));
+        }
+        postings.put(token, postings_merged);               //ottenuta la pl, la associo al token
+        return postings_merged.size()*posting_size;
     }
 
     public void sort() {
@@ -76,11 +75,11 @@ public class PostingList {
     }
 
     public void writeToDisk(boolean compressed, Lexicon lexicon) {
-        FileHelper.createDir(DOC_ID_PATH);
-        FileHelper.createDir(FREQ_PATH);
+        FileHelper.createDir(TEMP_DOC_ID_DIR);
+        FileHelper.createDir(TEMP_FREQ_DIR);
         if (!compressed){
-            try (DataOutputStream docStream = new DataOutputStream(new FileOutputStream(DOC_ID_PATH + "/part" + NUM_FILE_WRITTEN));
-                 DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(FREQ_PATH + "/part" + NUM_FILE_WRITTEN))){
+            try (DataOutputStream docStream = new DataOutputStream(new FileOutputStream(TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat"));
+                 DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat"))){
                 int i = 0;
                 for(String key : postings.keySet()) {
                     i = writeToDiskNotCompressed(lexicon, docStream, freqStream, key,i);
@@ -89,22 +88,30 @@ public class PostingList {
             } catch (IOException e) {
                 e.printStackTrace();
             }
+        }else{
+              if (maxDocId == null)
+                  maxDocId = new ArrayList<>();
+              maxDocId.add(CollectionStatistics.getCollectionSize());
+
         }
 
     }
 
-    public int writeToDiskNotCompressed(Lexicon lexicon, DataOutputStream docIdStream, DataOutputStream frequencyStream,String token, int offset) throws IOException {
+    public void writeToDiskCompressed(Lexicon lexicon, String token){
 
+    }
+
+    public int writeToDiskNotCompressed(Lexicon lexicon, DataOutputStream docIdStream, DataOutputStream frequencyStream,String token, int offset) throws IOException {
         List<Posting> postingLists = postings.get(token);
-        lexicon.updateDocIdOffset(token,offset*8);
-        lexicon.updateFrequencyOffset(token,offset*4);
+        lexicon.updateDocIdOffset(token,offset*Long.BYTES);
+        lexicon.updateFrequencyOffset(token,offset* Integer.BYTES);
         for (Posting posting : postingLists) {
             docIdStream.writeLong(posting.docid);
             frequencyStream.writeInt(posting.frequency);
             offset++;
         }
-        lexicon.updatedocIdSize(token, postingLists.size()*8);
-        lexicon.updatefrequencySize(token, postingLists.size()*4);
+        lexicon.updatedocIdSize(token, postingLists.size()*Long.BYTES);
+        lexicon.updatefrequencySize(token, postingLists.size()*Integer.BYTES);
         return offset;
 
     }
@@ -133,11 +140,11 @@ public class PostingList {
         if(skippingPointers.size()>1)
             numBlocks = SkipPointer.write(skippingPointers, lexiconEntry);
 
-        lexiconEntry.setNumBlock(numBlocks);
+        lexiconEntry.setNumBlocks(numBlocks);
 
     }
 
-    class Posting{
+     class Posting{
         long docid;
         int frequency;
 
