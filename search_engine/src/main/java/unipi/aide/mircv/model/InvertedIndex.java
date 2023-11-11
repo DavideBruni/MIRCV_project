@@ -12,13 +12,13 @@ public class InvertedIndex {
 
     private static final String DOCUMENT_IDS_PATH = "data/invertedIndex/document_ids.dat";
     private static final String FREQUENCY_PATH = "data/invertedIndex/frequencies.dat";
-    private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
+
     private boolean allDocumentProcessed;
     private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
     private static long lastDocId = 0;
 
     private void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean compressed) throws IOException {
-        PostingList postingList = new PostingList();
+        PostingLists postingLists = new PostingLists();
         Lexicon lexicon = new Lexicon();
         // Create a BufferedReader to read the file line by line
         BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // non dentro il try catch perhè la funzione è chiamata dentro un try catch, se chiudo
@@ -54,7 +54,7 @@ public class InvertedIndex {
                             }else{
                                 lexicon.updateDf(token);
                             }
-                            postingList.add(lastDocId, token, Collections.frequency(tokens,token));
+                            postingLists.add(lastDocId, token, Collections.frequency(tokens,token));
                         }
                     }else{
                         allDocumentProcessed = true;
@@ -62,11 +62,11 @@ public class InvertedIndex {
                         // TODO add print and log
                     }
                 }
-                postingList.sort();
-                postingList.writeToDisk(compressed,lexicon);
+                postingLists.sort();
+                postingLists.writeToDisk(compressed,lexicon);
                 lexicon.writeToDisk(false);
                 lexicon.clear();
-                postingList = new PostingList();
+                postingLists = new PostingLists();
                 System.gc();
             }
         }catch (PidNotFoundException | UnableToAddDocumentIndexException e) {
@@ -85,12 +85,12 @@ public class InvertedIndex {
         //  2.3.Crea la nuova posting list (docId e freqId) facendo attenzione all'ordinamento per docId (potrei buttare tutto dentro e poi ordinare)
         //  2.4 se la posting list supera 2KB, allora fai più blocchi (usa gli skipping pointers e implementali)
         //  2.5 Scrivi su file e aggiorna gli offsett
-        PostingList mergedPostingList = new PostingList();
+        PostingLists mergedPostingLists = new PostingLists();
         Lexicon mergedLexicon = new Lexicon();
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
         String[] lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
-        try (DataOutputStream docStream = new DataOutputStream(new FileOutputStream(DOCUMENT_IDS_PATH));
-             DataOutputStream freqStream = new DataOutputStream(new FileOutputStream(FREQUENCY_PATH))){
+        try (FileOutputStream docStream = new FileOutputStream(DOCUMENT_IDS_PATH);
+             FileOutputStream freqStream = new FileOutputStream(FREQUENCY_PATH)){
             // leggo per tutti i partial, solo la prima entrata e la salvo in un array di LExiconEntries
             // recupero il token minore
             // merge: quello che faccio ora + rimuovo dall'array quelli già analizzati
@@ -98,6 +98,7 @@ public class InvertedIndex {
             // per gli indici dove il valore della entry è null, leggo una nuova entry  (nella lettura gestire il case EOF e lasciare a null)
             // (nel confronto gestire il null pointer exception quando accedo al token dell'entry)
             int offset = 0;
+            int compressed_offset [] = new int[]{0,0};
             // trovare il token minimo --> trovare i partialLexicons
             while(true) {
                 LexiconEntry lexiconEntry = new LexiconEntry();
@@ -107,41 +108,35 @@ public class InvertedIndex {
                 int df = 0;
                 double idf;
                 // recupero le posting list --> recupero le posting!
-                List<PostingList> postingLists = new ArrayList<>();
+                List<PostingLists> postingLists = new ArrayList<>();
                 for (int i = 0; i < lowestTokens.length; i++) {
                     if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
                         LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
                         if(tmp != null) {
                             df += tmp.getDf();
-                            postingLists.add(new PostingList().readFromDisk(token, i, tmp.getDocIdOffset(),
-                                    tmp.getFrequencyOffset(), tmp.getDocIdSize(),
-                                    tmp.getFrequencySize()));
+                            postingLists.add(new PostingLists().readFromDisk(token, i, tmp.getDocIdOffset(),
+                                    tmp.getFrequencyOffset(),tmp.getPostingNumber(),compressed));
                             lowestTokens[i] = null;
                         }
                     }
                 }
-
-
                 // creo un'unica posting list
-                int postingsSize = mergedPostingList.add(postingLists, token);
-                //gestire la situazione blocchi
-                if (postingsSize > POSTING_SIZE_THRESHOLD){
-                    mergedPostingList.addSkipPointers(token,lexiconEntry,compressed); //if some error, it must return 1
-                }
-
+                mergedPostingLists.add(postingLists, token);
                 // aggiorna l'entry del vocabolario
                 idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
-
                 lexiconEntry.setDf(df);
                 lexiconEntry.setIdf(idf);
                 // scrivere in docId, in frequency e lexicon
                 if (!compressed) {
-                    offset= mergedPostingList.writeToDiskNotCompressed(mergedLexicon,docStream,freqStream,token,offset);
+                    DataOutputStream dos_docStream = new DataOutputStream(docStream);
+                    DataOutputStream dos_freqStream = new DataOutputStream(freqStream);
+                    offset = mergedPostingLists.writeToDiskNotCompressed(mergedLexicon,dos_docStream,dos_freqStream,offset, true);
                 }else{
-                    // mergedPostingList.writeToDiskCompressed(mergedLexicon);
+                    compressed_offset = mergedPostingLists.writeToDiskCompressed(mergedLexicon,docStream,freqStream,compressed_offset[0],compressed_offset[0],true);
 
                 }
                 mergedLexicon.add(token, lexiconEntry);
+                mergedPostingLists = new PostingLists();
             }
 
         } catch (IOException e) {

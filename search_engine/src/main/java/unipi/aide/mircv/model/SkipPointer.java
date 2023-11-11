@@ -7,15 +7,20 @@ public class SkipPointer {
     private long maxDocId;
     private int docIdsOffset;
     private int frequencyOffset;
-    private static final int skipPointerDimension = 8 + 4 + 4;
+    private int numDocId;
+    private static final int skipPointerDimension = 8 + 4 + 4 + 4;
     private static final String SKIP_POINTERS_PATH = "data/skip_pointers.dat";
-    private static int NUM_SKIP_POINTER = 0;
     private static int BYTE_WRITTEN = 0;
 
-    public SkipPointer(long docid, int docIdsOffset, int frequencyOffset) {
+    public SkipPointer(long docid, int docIdsOffset, int frequencyOffset, int numDocId) {
         maxDocId = docid;
         this.docIdsOffset = docIdsOffset;
         this.frequencyOffset = frequencyOffset;
+        this.numDocId = numDocId;
+    }
+
+    public SkipPointer() {
+
     }
 
     public static int write(List<SkipPointer> skippingPointers, LexiconEntry lexiconEntry) {
@@ -25,7 +30,7 @@ public class SkipPointer {
                 docStream.writeLong(skipPointer.maxDocId);
                 docStream.writeInt(skipPointer.docIdsOffset);
                 docStream.writeInt(skipPointer.frequencyOffset);
-                docStream.writeInt(skipPointer.skipPointerDimension);
+                docStream.writeInt(skipPointer.numDocId);
                 BYTE_WRITTEN +=skipPointerDimension;
             }
         } catch (IOException e) {
@@ -33,6 +38,16 @@ public class SkipPointer {
             return 1;
         }
         return skippingPointers.size();
+    }
+
+    public void setDocIdOffset(int i) {
+    }
+
+    public void setFrequencyOffset(int i) {
+    }
+
+    public void setNumberOfDocId(int size) {
+        numDocId = size;
     }
 
 

@@ -22,7 +22,6 @@ public class Lexicon {
     }
 
 
-
     public static String[] getFirstTokens(DataInputStream[] partialLexiconStreams) {
         return getTokens(new String[NUM_FILE_WRITTEN],partialLexiconStreams);
     }
@@ -61,8 +60,6 @@ public class Lexicon {
             lexiconEntry.setIdf(partialLexiconStream.readDouble());
             lexiconEntry.setDocIdOffset(partialLexiconStream.readInt());
             lexiconEntry.setFrequencyOffset(partialLexiconStream.readInt());
-            lexiconEntry.setDocIdSize(partialLexiconStream.readInt());
-            lexiconEntry.setFrequencySize(partialLexiconStream.readInt());
             lexiconEntry.setNumBlocks(partialLexiconStream.readInt());
         } catch (EOFException eof){
             eof.printStackTrace();
@@ -106,22 +103,6 @@ public class Lexicon {
         }
     }
 
-    public void updatedocIdSize(String token, int offset) {
-        if (contains(token)) {
-            LexiconEntry tmp = entries.get(token);
-            tmp.setDocIdSize(offset);
-
-        }
-    }
-
-    public void updatefrequencySize(String token, int offset) {
-        if (contains(token)) {
-            LexiconEntry tmp = entries.get(token);
-            tmp.setFrequencySize(offset);
-
-        }
-    }
-
     public void writeToDisk(boolean is_merged) {
         String filename;
         if(is_merged) {
@@ -139,9 +120,8 @@ public class Lexicon {
                 dataOutputStream.writeDouble(tmp.getIdf());
                 dataOutputStream.writeInt(tmp.getDocIdOffset());
                 dataOutputStream.writeInt(tmp.getFrequencyOffset());
-                dataOutputStream.writeInt(tmp.getDocIdSize());
-                dataOutputStream.writeInt(tmp.getFrequencySize());
                 dataOutputStream.writeInt(tmp.getNumBlocks());
+                dataOutputStream.writeInt(tmp.getSkipPointerOffset());
             }
             if (!is_merged)
                 NUM_FILE_WRITTEN++;
@@ -168,9 +148,8 @@ public class Lexicon {
                     tmp.setIdf(dataInputStream.readDouble());
                     tmp.setDocIdOffset(dataInputStream.readInt());
                     tmp.setFrequencyOffset(dataInputStream.readInt());
-                    tmp.setDocIdSize(dataInputStream.readInt());
-                    tmp.setFrequencySize(dataInputStream.readInt());
                     tmp.setNumBlocks(dataInputStream.readInt());
+                    tmp.setSkipPointerOffset(dataInputStream.readInt());
                     lexicon.put(key,tmp);
 
                 }catch (EOFException eof){
@@ -199,5 +178,13 @@ public class Lexicon {
         }catch (IndexOutOfBoundsException e) {
             return null;
         }
+    }
+
+    public void setEntry(String token, LexiconEntry lexiconEntry){
+        entries.put(token,lexiconEntry);
+    }
+
+    public void setNumberOfPostings(String token, int size) {
+        entries.get(token).setPostingNumber(size);
     }
 }

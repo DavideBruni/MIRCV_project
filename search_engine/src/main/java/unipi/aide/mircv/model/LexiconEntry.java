@@ -5,8 +5,7 @@ public class LexiconEntry {
     private double idf;
     private int docIdOffset;
     private int frequencyOffset;
-    private int docIdSize;
-    private int frequencySize;
+    private int postingNumber;
     private int numBlocks = 1;
     private int skipPointerOffset;
 
@@ -59,26 +58,21 @@ public class LexiconEntry {
         return numBlocks;
     }
 
-    public int getDocIdSize() {
-        return docIdSize;
+    public int getPostingNumber() {
+        return postingNumber;
     }
 
-    public void setDocIdSize(int docIdSize) {
-        this.docIdSize = docIdSize;
+    public void setPostingNumber(int postingListsNumber) {
+        this.postingNumber = postingListsNumber;
     }
-
-    public int getFrequencySize() {
-        return frequencySize;
-    }
-
-    public void setFrequencySize(int frequencySize) {
-        this.frequencySize = frequencySize;
-    }
-
 
     public void setSkipPointerOffset(int skipPointerOffset) {
         this.skipPointerOffset=skipPointerOffset;
 
+    }
+
+    public int getSkipPointerOffset() {
+        return skipPointerOffset;
     }
 }
 

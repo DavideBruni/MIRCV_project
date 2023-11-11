@@ -8,54 +8,54 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-public class PostingListTest {
-    private PostingList postingList;
+public class PostingListsTest {
+    private PostingLists postingLists;
 
     @Before
     public void setUp() {
-        postingList = new PostingList();
+        postingLists = new PostingLists();
     }
 
     @Test
     public void testAddAndReadFromDisk() {
-        List<PostingList> postingLists = new ArrayList<>();
+        List<PostingLists> postingLists = new ArrayList<>();
 
-        PostingList postingList1 = new PostingList();
-        postingList1.add(1, "token1", 3);
-        postingList1.add(2, "token1", 2);
+        PostingLists postingLists1 = new PostingLists();
+        postingLists1.add(1, "token1", 3);
+        postingLists1.add(2, "token1", 2);
 
-        PostingList postingList2 = new PostingList();
-        postingList2.add(2, "token1", 4);
-        postingList2.add(3, "token1", 1);
+        PostingLists postingLists2 = new PostingLists();
+        postingLists2.add(2, "token1", 4);
+        postingLists2.add(3, "token1", 1);
 
-        postingLists.add(postingList1);
-        postingLists.add(postingList2);
+        postingLists.add(postingLists1);
+        postingLists.add(postingLists2);
 
-        int size = postingList.add(postingLists, "token1");
+        int size = this.postingLists.add(postingLists, "token1");
         assertEquals(48, size); // Make sure the size matches the expected value
 
-        PostingList readPostingList = postingList.readFromDisk("token1", 0, 0, 0, size, 0);
-        assertNotNull(readPostingList);
+        PostingLists readPostingLists = this.postingLists.readFromDisk("token1", 0, 0, 0, size, 0);
+        assertNotNull(readPostingLists);
 
     }
 
     @Test
     public void testAddAndSort() {
-        postingList.add(2, "token2", 4);
-        postingList.add(3, "token3", 1);
-        postingList.add(1, "token1", 3);
+        postingLists.add(2, "token2", 4);
+        postingLists.add(3, "token3", 1);
+        postingLists.add(1, "token1", 3);
 
-        postingList.sort();
+        postingLists.sort();
 
         // Check if the postings are sorted by token name
-        List<String> keys = new ArrayList<>(postingList.postings.keySet());
+        List<String> keys = new ArrayList<>(postingLists.postings.keySet());
         assertEquals("token1", keys.get(0));
         assertEquals("token2", keys.get(1));
         assertEquals("token3", keys.get(2));
 
-        assertEquals(1, postingList.postings.get(keys.get(0)).get(0).docid);
-        assertEquals(2, postingList.postings.get(keys.get(1)).get(0).docid);
-        assertEquals(3, postingList.postings.get(keys.get(2)).get(0).docid);
+        assertEquals(1, postingLists.postings.get(keys.get(0)).get(0).docid);
+        assertEquals(2, postingLists.postings.get(keys.get(1)).get(0).docid);
+        assertEquals(3, postingLists.postings.get(keys.get(2)).get(0).docid);
     }
 
     /*
