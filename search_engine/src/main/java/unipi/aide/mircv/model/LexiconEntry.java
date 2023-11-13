@@ -8,6 +8,7 @@ public class LexiconEntry {
     private int postingNumber;
     private int numBlocks = 1;
     private int skipPointerOffset;
+    private double termUpperBound;
 
     public LexiconEntry(){
         df = 1;
@@ -66,13 +67,12 @@ public class LexiconEntry {
         this.postingNumber = postingListsNumber;
     }
 
-    public void setSkipPointerOffset(int skipPointerOffset) {
-        this.skipPointerOffset=skipPointerOffset;
+    public void setSkipPointerOffset(int skipPointerOffset) {this.skipPointerOffset=skipPointerOffset;}
 
-    }
+    public int getSkipPointerOffset() {return skipPointerOffset;}
 
-    public int getSkipPointerOffset() {
-        return skipPointerOffset;
-    }
+    public double getTermUpperBound() {return termUpperBound;}
+
+    public void setTermUpperBound(double termUpperBound) {this.termUpperBound = termUpperBound;}
 }
 

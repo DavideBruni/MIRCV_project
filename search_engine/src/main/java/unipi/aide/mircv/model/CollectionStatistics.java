@@ -40,9 +40,8 @@ public class CollectionStatistics {
             collectionSize = dataOutputStream.readInt();
             lexiconSize = dataOutputStream.readLong();
             documentsLen = dataOutputStream.readLong();
-        } catch (
-                IOException e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) {
+            // aggiungere log
         }
     }
 

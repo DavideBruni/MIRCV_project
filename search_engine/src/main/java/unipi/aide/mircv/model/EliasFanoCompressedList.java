@@ -1,8 +1,11 @@
 package unipi.aide.mircv.model;
 
+import unipi.aide.mircv.streamHelper.StreamHelper;
+
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
@@ -30,20 +33,25 @@ public class EliasFanoCompressedList {
         }
     }
 
-    public void writeToDisk(FileOutputStream stream, int offset) throws IOException {
-        stream.write(highbits.size());      //  write the length of highBits (how many cluster)
+    public void writeToDisk(FileOutputStream stream) throws IOException {
+        StreamHelper.writeInt(stream, highbits.size());      //  write the length of highBits (how many cluster)
         for(byte[] highBits : highBitsAsByteArray){
-            stream.write(highBits,offset,highBits.length);
-            offset += highBits.length;
+            if(highBits.length == 0){
+                highBits = new byte[1];
+                Arrays.fill(highBits, (byte) 0);;
+            }
+            stream.write(highBits,0,highBits.length);
+
         }
         boolean is_first = true;
         for(byte[] lowBits : lowBitsAsByteArray){
             if(is_first) {
-                stream.write(lowBits_len);      //num di bit per lowBit number
+                StreamHelper.writeInt(stream,lowBits_len);      //num di bit per lowBit number
                 is_first = false;
+                if (lowBits_len == 0)
+                    continue;
             }
-            stream.write(lowBits,offset,lowBits.length);
-            offset += lowBits.length;
+            stream.write(lowBits,0,lowBits.length);
         }
     }
 

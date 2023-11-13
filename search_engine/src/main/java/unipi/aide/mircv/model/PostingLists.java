@@ -154,14 +154,17 @@ public class PostingLists {
             EliasFanoCompressedList eliasFanoCompressedDocIdList = EliasFano.compress(postingList);
             List<BitSet> unaryCompressedFrequencyList = UnaryCompressor.compress(postingList);
 
-            eliasFanoCompressedDocIdList.writeToDisk(docStream,docOffset);
-            skipPointers.get(postingListsToCompress.indexOf(postingList)).setDocIdOffset(docOffset);
+            if(skipPointers.size()>0)
+                skipPointers.get(postingListsToCompress.indexOf(postingList)).setDocIdOffset(docOffset);
+            eliasFanoCompressedDocIdList.writeToDisk(docStream);
             docOffset = eliasFanoCompressedDocIdList.getSize();
 
-            skipPointers.get(postingListsToCompress.indexOf(postingList)).setFrequencyOffset(freqOffset);
+            if(skipPointers.size()>0)
+                skipPointers.get(postingListsToCompress.indexOf(postingList)).setFrequencyOffset(freqOffset);
             freqOffset = UnaryCompressor.writeToDisk(unaryCompressedFrequencyList,freqOffset, freqStream);
 
-            skipPointers.get(postingListsToCompress.indexOf(postingList)).setNumberOfDocId(postingList.size());
+            if(skipPointers.size()>0)
+                skipPointers.get(postingListsToCompress.indexOf(postingList)).setNumberOfDocId(postingList.size());
         }
 
         return new int[]{docOffset, freqOffset};
@@ -206,6 +209,12 @@ public class PostingLists {
             }
             lexicon.setNumberOfPostings(token,postingLists.size());
         }
+        try {
+            docIdStream.close();
+            frequencyStream.close();
+        }catch(IOException e){
+            // do something
+        }
         return offset;      // in realtà è il numero di posting list scritte
 
     }
@@ -234,15 +243,9 @@ public class PostingLists {
 
     }
 
+    public int getNumberOfPostingList(){return postings.keySet().size();}
 
-
-     class Posting{
-        long docid;
-        int frequency;
-
-        public Posting(long docid, int frequency) {
-            this.docid = docid;
-            this.frequency = frequency;
-        }
+    public List<Posting> getPostingList(String s) {
+        return postings.get(s);
     }
 }

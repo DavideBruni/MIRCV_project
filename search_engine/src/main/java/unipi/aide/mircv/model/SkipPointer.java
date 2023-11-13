@@ -50,6 +50,41 @@ public class SkipPointer {
         numDocId = size;
     }
 
+    public long getMaxDocId() {
+        return maxDocId;
+    }
+
+    public void setMaxDocId(long maxDocId) {
+        this.maxDocId = maxDocId;
+    }
+
+    public int getDocIdsOffset() {
+        return docIdsOffset;
+    }
+
+    public void setDocIdsOffset(int docIdsOffset) {
+        this.docIdsOffset = docIdsOffset;
+    }
+
+    public int getFrequencyOffset() {
+        return frequencyOffset;
+    }
+
+    public int getNumDocId() {
+        return numDocId;
+    }
+
+    public void setNumDocId(int numDocId) {
+        this.numDocId = numDocId;
+    }
+
+    public static int getByteWritten() {
+        return BYTE_WRITTEN;
+    }
+
+    public static void setByteWritten(int byteWritten) {
+        BYTE_WRITTEN = byteWritten;
+    }
 
     // altro non sarà che un file che contiene i descrittori dei blocchi della posting list, nel caso in cui ce ne sia più di uno
 }

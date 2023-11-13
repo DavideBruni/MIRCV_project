@@ -8,7 +8,7 @@ import java.util.BitSet;
 import java.util.List;
 
 public class EliasFano {
-    public static EliasFanoCompressedList compress(List<PostingLists.Posting> postingList) {
+    public static EliasFanoCompressedList compress(List<Posting> postingList) {
         long U = postingList.get(postingList.size() - 1).docid;     // greatest long id to represent
         long n = postingList.size();
         int l = (int) Math.ceil(Math.log(U/n)/Math.log(2));
@@ -19,7 +19,7 @@ public class EliasFano {
         int clusters [] = new int[numHighBits];
         List<BitSet> highbits = new ArrayList();
 
-        for(PostingLists.Posting posting : postingList){
+        for(Posting posting : postingList){
             BitSet lowBitsSet = new BitSet(l);
             for (int i = 0; i < l; i++) {
                 boolean bit = ((posting.docid >> i) & 1) == 1;
@@ -28,17 +28,13 @@ public class EliasFano {
             lowbits.add(lowBitsSet);
 
             // high bits: set clusters
-            for(int i = 0; i<numHighBits; i++){
-                boolean bit = ((posting.docid >> l) & i) == 1;
-                if(bit) {
-                    clusters[i]++;
-                    break;
-                }
-            }
-            // high bits: Unary code
-            highbits = UnaryCompressor.compress(clusters,sizeHighBits);
+            int tmp = (int) (posting.docid >> l);
+            clusters[tmp]++;
 
         }
+        // high bits: Unary code
+        highbits = UnaryCompressor.compress(clusters,sizeHighBits);
+
 
         return new EliasFanoCompressedList(highbits,lowbits,l);
 
@@ -58,8 +54,11 @@ public class EliasFano {
         for(int i = 0; i<highBitsLen; i++){
             for(int j = 0; j<clusters[i]; j++){
                 int byteWritten = (int)(Math.ceil((Math.log(numBitPerLowBits)/Math.log(2))/8));
-                byte[] lowBits = docStream.readNBytes(byteWritten);
-                docIds.add(decompressNumber(j,lowBits,numBitPerLowBits));
+                byte[] lowBits = new byte[0];
+                if(byteWritten > 0){
+                    lowBits = docStream.readNBytes(byteWritten);
+                }
+                docIds.add(decompressNumber(i,lowBits,numBitPerLowBits));
             }
         }
 

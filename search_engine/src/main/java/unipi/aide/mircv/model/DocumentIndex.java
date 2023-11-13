@@ -24,14 +24,31 @@ public class DocumentIndex {
     }
 
     public static DocumentInfo retrieve(String docno) throws DocumentNotFoundException {
-        FileHelper.createDir(DIR_PATH);
+        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(DIR_PATH+FILE_NAME))) {
+            while (dataInputStream.available() > 0) {
+                String storedDocno = Integer.toString(dataInputStream.readInt());
+                long docid = dataInputStream.readLong();
+                int docLen = dataInputStream.readInt();
+                if (docno.equals(storedDocno)) {
+                    return new DocumentInfo(storedDocno,docid, docLen);
+                }
+            }
+        } catch (FileNotFoundException e) {
+            throw new DocumentNotFoundException("Document index file not found.");
+        } catch (IOException e) {
+            throw new DocumentNotFoundException("Document not found in the index.");
+        }
+        throw new DocumentNotFoundException("Document not found in the index.");
+    }
+
+    public static int getDocumentLength(long docId) throws DocumentNotFoundException {
         try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(DIR_PATH+FILE_NAME))) {
             while (dataInputStream.available() > 0) {
                 String storedDocno = String.valueOf(dataInputStream.readInt());
                 long docid = dataInputStream.readLong();
                 int docLen = dataInputStream.readInt();
-                if (docno.equals(storedDocno)) {
-                    return new DocumentInfo(storedDocno,docid, docLen);
+                if (docId == docid) {
+                    return docLen;
                 }
             }
         } catch (FileNotFoundException e) {

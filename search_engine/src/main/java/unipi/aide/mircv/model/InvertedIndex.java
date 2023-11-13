@@ -98,7 +98,7 @@ public class InvertedIndex {
             // per gli indici dove il valore della entry è null, leggo una nuova entry  (nella lettura gestire il case EOF e lasciare a null)
             // (nel confronto gestire il null pointer exception quando accedo al token dell'entry)
             int offset = 0;
-            int compressed_offset [] = new int[]{0,0};
+            int[] compressed_offset = new int[]{0,0};
             // trovare il token minimo --> trovare i partialLexicons
             while(true) {
                 LexiconEntry lexiconEntry = new LexiconEntry();
@@ -133,7 +133,6 @@ public class InvertedIndex {
                     offset = mergedPostingLists.writeToDiskNotCompressed(mergedLexicon,dos_docStream,dos_freqStream,offset, true);
                 }else{
                     compressed_offset = mergedPostingLists.writeToDiskCompressed(mergedLexicon,docStream,freqStream,compressed_offset[0],compressed_offset[0],true);
-
                 }
                 mergedLexicon.add(token, lexiconEntry);
                 mergedPostingLists = new PostingLists();
@@ -144,7 +143,17 @@ public class InvertedIndex {
         }
 
         mergedLexicon.writeToDisk(true);
+        closeStreams(partialLexiconStreams);
+    }
 
+    private void closeStreams(InputStream[] partialLexiconStreams) {
+        for(InputStream stream : partialLexiconStreams){
+            try {
+                stream.close();
+            } catch (IOException e) {
+                // add log
+            }
+        }
     }
 
     private String findLowerToken(String[] tokens){
