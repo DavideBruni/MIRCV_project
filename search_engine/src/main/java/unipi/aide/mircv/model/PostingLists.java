@@ -1,6 +1,6 @@
 package unipi.aide.mircv.model;
 
-import unipi.aide.mircv.fileHelper.FileHelper;
+import unipi.aide.mircv.helpers.FileHelper;
 
 import java.io.*;
 import java.util.*;
@@ -8,7 +8,7 @@ import java.util.stream.Collectors;
 
 public class PostingLists {
 
-    Map<String, List<Posting>> postings;
+    Map<String, PostingList> postings;
     private static final String TEMP_DOC_ID_DIR ="data/invertedIndex/temp/docIds";
     private static final String TEMP_FREQ_DIR ="data/invertedIndex/temp/frequencies";
     private static int NUM_FILE_WRITTEN = 0;
@@ -24,7 +24,7 @@ public class PostingLists {
         for(int i = 0; i<docIds.size();i++){
             postingList.add(new Posting(docIds.get(i), frequencies.get(i)));
         }
-        postings.put(token,postingList);
+        postings.put(token,new PostingList(postingList,token));
     }
 
 
@@ -63,7 +63,7 @@ public class PostingLists {
 
     public void add(long docId, String token, int frequency) {
         if (!postings.containsKey(token)){
-            postings.put(token, new ArrayList<>());
+            postings.put(token, new PostingList());
         }
         postings.get(token).add(new Posting(docId, frequency));
     }
@@ -71,9 +71,9 @@ public class PostingLists {
     public void add(List<PostingLists> postingLists, String token) {
         List<Posting> postings_merged = new ArrayList<>();
         for(PostingLists postingList : postingLists){        // per lo stesso token devo fare il merge in unica p.l
-            postings_merged.addAll(postingList.postings.get(token));
+            postings_merged.addAll(postingList.postings.get(token).getPostingList());
         }
-        postings.put(token, postings_merged);               //ottenuta la pl, la associo al token
+        postings.put(token, new PostingList(postings_merged,token));               //ottenuta la pl, la associo al token
     }
 
     public void sort() {
@@ -117,7 +117,7 @@ public class PostingLists {
 
         for(String token: postings.keySet()){
             List<List<Posting>> postingListsToCompress = new ArrayList<>();
-            List<Posting> postingLists = postings.get(token);
+            List<Posting> postingLists = postings.get(token).getPostingList();
 
             long U = postingLists.get(postingLists.size() - 1).docid;
             long n = postingLists.size();
@@ -127,7 +127,7 @@ public class PostingLists {
             List<SkipPointer> skipPointers = new ArrayList<>();
 
             if(is_merged && ((n*Math.ceil(Math.log(U/(double)n) / Math.log(2.0)) +2*n)/8 > POSTING_SIZE_THRESHOLD)){
-                int blockSize = (int) Math.round(Math.sqrt(postings.get(token).size()));
+                int blockSize = (int) Math.round(Math.sqrt(postings.get(token).getPostingList().size()));
                 initializeSkipPointers(blockSize,postingListsToCompress,skipPointers,postingLists);
             }else{
                 postingListsToCompress.add(postingLists);
@@ -194,7 +194,7 @@ public class PostingLists {
 
     public int writeToDiskNotCompressed(Lexicon lexicon, DataOutputStream docIdStream, DataOutputStream frequencyStream, int offset, boolean is_merged) throws IOException {
         for(String token: postings.keySet()){
-            List<Posting> postingLists = postings.get(token);
+            List<Posting> postingLists = postings.get(token).getPostingList();
             lexicon.updateDocIdOffset(token, offset * Long.BYTES);
             lexicon.updateFrequencyOffset(token, offset * Integer.BYTES);
             if (is_merged && postingLists.size() * (Long.BYTES + Integer.BYTES) > POSTING_SIZE_THRESHOLD){
@@ -222,7 +222,7 @@ public class PostingLists {
 
     private void addSkipPointers(String token, LexiconEntry lexiconEntry) {
         // if some error, return 1
-        List<Posting> token_postings = postings.get(token);
+        List<Posting> token_postings = postings.get(token).getPostingList();
         int blockSize = (int) Math.round(Math.sqrt(token_postings.size()));
         int i = 0;
         int numBlocks = 0;
@@ -241,11 +241,5 @@ public class PostingLists {
 
         lexiconEntry.setNumBlocks(numBlocks);
 
-    }
-
-    public int getNumberOfPostingList(){return postings.keySet().size();}
-
-    public List<Posting> getPostingList(String s) {
-        return postings.get(s);
     }
 }

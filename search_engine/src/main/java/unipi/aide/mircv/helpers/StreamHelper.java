@@ -1,4 +1,4 @@
-package unipi.aide.mircv.streamHelper;
+package unipi.aide.mircv.helpers;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

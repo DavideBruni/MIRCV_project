@@ -1,17 +1,17 @@
 package unipi.aide.mircv.model;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.PidNotFoundException;
 import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
 import unipi.aide.mircv.parsing.Parser;
+import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
 import java.util.*;
 
 public class InvertedIndex {
 
-    private static final String DOCUMENT_IDS_PATH = "data/invertedIndex/document_ids.dat";
-    private static final String FREQUENCY_PATH = "data/invertedIndex/frequencies.dat";
 
     private boolean allDocumentProcessed;
     private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
@@ -89,8 +89,8 @@ public class InvertedIndex {
         Lexicon mergedLexicon = new Lexicon();
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
         String[] lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
-        try (FileOutputStream docStream = new FileOutputStream(DOCUMENT_IDS_PATH);
-             FileOutputStream freqStream = new FileOutputStream(FREQUENCY_PATH)){
+        try (FileOutputStream docStream = new FileOutputStream(Configuration.DOCUMENT_IDS_PATH);
+             FileOutputStream freqStream = new FileOutputStream(Configuration.FREQUENCY_PATH)){
             // leggo per tutti i partial, solo la prima entrata e la salvo in un array di LExiconEntries
             // recupero il token minore
             // merge: quello che faccio ora + rimuovo dall'array quelli già analizzati
@@ -101,17 +101,17 @@ public class InvertedIndex {
             int[] compressed_offset = new int[]{0,0};
             // trovare il token minimo --> trovare i partialLexicons
             while(true) {
-                LexiconEntry lexiconEntry = new LexiconEntry();
                 String token = findLowerToken(lowestTokens);
                 if (token == null)
                     break;
+                LexiconEntry lexiconEntry = new LexiconEntry();
                 int df = 0;
                 double idf;
                 // recupero le posting list --> recupero le posting!
                 List<PostingLists> postingLists = new ArrayList<>();
                 for (int i = 0; i < lowestTokens.length; i++) {
                     if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
-                        LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
+                        LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i],token);
                         if(tmp != null) {
                             df += tmp.getDf();
                             postingLists.add(new PostingLists().readFromDisk(token, i, tmp.getDocIdOffset(),
@@ -134,6 +134,7 @@ public class InvertedIndex {
                 }else{
                     compressed_offset = mergedPostingLists.writeToDiskCompressed(mergedLexicon,docStream,freqStream,compressed_offset[0],compressed_offset[0],true);
                 }
+                Scorer.BM25_termUpperBound(mergedPostingLists.postings.get(token),lexiconEntry);
                 mergedLexicon.add(token, lexiconEntry);
                 mergedPostingLists = new PostingLists();
             }

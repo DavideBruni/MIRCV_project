@@ -1,6 +1,6 @@
 package unipi.aide.mircv.model;
 
-import unipi.aide.mircv.streamHelper.StreamHelper;
+import unipi.aide.mircv.helpers.StreamHelper;
 
 import java.io.FileOutputStream;
 import java.io.IOException;

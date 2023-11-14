@@ -1,5 +1,7 @@
 package unipi.aide.mircv.model;
 
+import unipi.aide.mircv.exceptions.DocIdNotFoundException;
+
 import java.io.*;
 import java.util.List;
 
@@ -8,7 +10,7 @@ public class SkipPointer {
     private int docIdsOffset;
     private int frequencyOffset;
     private int numDocId;
-    private static final int skipPointerDimension = 8 + 4 + 4 + 4;
+    private static final int SKIP_POINTER_DIMENSION = 8 + 4 + 4 + 4;
     private static final String SKIP_POINTERS_PATH = "data/skip_pointers.dat";
     private static int BYTE_WRITTEN = 0;
 
@@ -31,13 +33,19 @@ public class SkipPointer {
                 docStream.writeInt(skipPointer.docIdsOffset);
                 docStream.writeInt(skipPointer.frequencyOffset);
                 docStream.writeInt(skipPointer.numDocId);
-                BYTE_WRITTEN +=skipPointerDimension;
+                BYTE_WRITTEN += SKIP_POINTER_DIMENSION;
             }
         } catch (IOException e) {
             // handle error in some way
             return 1;
         }
         return skippingPointers.size();
+    }
+
+    public static SkipPointer readFromDisk(int skipPointerOffset, int numBlockRead) throws IOException {
+        DataInputStream docStream = new DataInputStream(new FileInputStream(SKIP_POINTERS_PATH));
+        docStream.skipBytes(skipPointerOffset + numBlockRead* SKIP_POINTER_DIMENSION);
+        return new SkipPointer(docStream.readLong(),docStream.readInt(),docStream.readInt(),docStream.readInt());
     }
 
     public void setDocIdOffset(int i) {

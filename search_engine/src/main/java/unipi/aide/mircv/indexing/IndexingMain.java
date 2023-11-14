@@ -8,7 +8,7 @@ import unipi.aide.mircv.model.InvertedIndex;
 import java.io.*;
 import java.nio.file.Path;
 
-public class Main {
+public class IndexingMain {
 
     private static final String TSV_FILE_NAME = "collection.tsv";
 

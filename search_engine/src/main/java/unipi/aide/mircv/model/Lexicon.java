@@ -1,9 +1,10 @@
 package unipi.aide.mircv.model;
 
-import unipi.aide.mircv.fileHelper.FileHelper;
+import unipi.aide.mircv.helpers.FileHelper;
 
 import java.io.*;
 import java.util.*;
+import java.util.function.Function;
 
 public class Lexicon {
     private static final String FINAL_PATH = "data/invertedIndex/lexicon.dat";
@@ -13,7 +14,9 @@ public class Lexicon {
 
     private Map<String,LexiconEntry> entries;
 
-    public Lexicon(){
+    private static Lexicon instance;
+
+    Lexicon(){
         entries = new TreeMap<>();
     }
 
@@ -53,7 +56,7 @@ public class Lexicon {
         return dataInputStreams;
     }
 
-    public static LexiconEntry readEntry(DataInputStream partialLexiconStream) {
+    public static LexiconEntry readEntry(DataInputStream partialLexiconStream,String token) {
         LexiconEntry lexiconEntry = new LexiconEntry();
         try {
             lexiconEntry.setDf(partialLexiconStream.readInt());
@@ -69,6 +72,10 @@ public class Lexicon {
             lexiconEntry = null;
         }
         return lexiconEntry;
+    }
+
+    public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
+        return valueExtractor.apply(instance.getEntry(term));
     }
 
     public boolean contains(String token) {
@@ -107,6 +114,7 @@ public class Lexicon {
         String filename;
         if(is_merged) {
             filename = FINAL_PATH;
+            instance = this;
         }else {
             FileHelper.createDir(TEMP_DIR);
             filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";

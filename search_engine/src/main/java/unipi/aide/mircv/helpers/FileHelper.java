@@ -1,4 +1,4 @@
-package unipi.aide.mircv.fileHelper;
+package unipi.aide.mircv.helpers;
 
 import java.io.File;
 

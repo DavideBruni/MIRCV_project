@@ -40,10 +40,11 @@ public class EliasFano {
 
     }
 
-    public static List<Long> decompress(FileInputStream docStream, int docIdOffset) throws IOException {
+    public static List<Long> decompress(FileInputStream docStream, long docIdOffset) throws IOException {
         List<Long> docIds = new ArrayList<>();
         byte[] integer_buffer = new byte[4];
-        docStream.readNBytes(integer_buffer,docIdOffset,Integer.BYTES);       // leggo l'intero
+        docStream.skipNBytes(docIdOffset);
+        docStream.readNBytes(integer_buffer,0,Integer.BYTES);       // leggo l'intero
         int highBitsLen = byteArrayToInt(integer_buffer);                     // lo convergo
         int[] clusters = new int[highBitsLen];                          // creo un array che contiene i cluster
         for(int i = 0; i<highBitsLen; i++){

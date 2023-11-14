@@ -2,7 +2,7 @@ package unipi.aide.mircv.model;
 
 import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
-import unipi.aide.mircv.fileHelper.FileHelper;
+import unipi.aide.mircv.helpers.FileHelper;
 
 import java.io.*;
 
