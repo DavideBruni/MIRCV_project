@@ -19,7 +19,7 @@ public class Parser {
     private static final String STOPWORDS_STRING_PATH = "utils/stopwords.txt";
 
     // This method tokenizes the input text and performs various text processing operations based on the 'parseFlag'.
-    private static List<String> getTokens(String text, boolean parseFlag) {
+    public static List<String> getTokens(String text, boolean parseFlag) {
         text = text.replaceAll("<[^>]+>", " "); // Remove HTML
         String[] punctuationMarks = {"!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~"};
         for (String c : punctuationMarks) {

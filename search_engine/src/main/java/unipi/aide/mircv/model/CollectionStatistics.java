@@ -11,6 +11,10 @@ public class CollectionStatistics {
 
     private static long documentsLen;        //sum of the length of the docs
 
+    private static int lengthLongestTerm;
+
+    private static int numberOfTokens;
+
     private static final String COLLECTION_STATISTICS_PATH = "data/invertedIndex/collectionStatistics.dat";  //Path to the collection size
 
     public static void updateDocumentsLen(int size) {
@@ -29,6 +33,8 @@ public class CollectionStatistics {
             dataOutputStream.writeInt(collectionSize);
             dataOutputStream.writeLong(lexiconSize);
             dataOutputStream.writeLong(documentsLen);
+            dataOutputStream.writeInt(lengthLongestTerm);
+            dataOutputStream.writeInt(numberOfTokens);
         } catch (
         IOException e) {
             throw new RuntimeException(e);
@@ -36,10 +42,12 @@ public class CollectionStatistics {
     }
 
     public static void readFromDisk() {
-        try (DataInputStream dataOutputStream = new DataInputStream(new FileInputStream(COLLECTION_STATISTICS_PATH))) {
-            collectionSize = dataOutputStream.readInt();
-            lexiconSize = dataOutputStream.readLong();
-            documentsLen = dataOutputStream.readLong();
+        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(COLLECTION_STATISTICS_PATH))) {
+            collectionSize = dataInputStream.readInt();
+            lexiconSize = dataInputStream.readLong();
+            documentsLen = dataInputStream.readLong();
+            lengthLongestTerm = dataInputStream.readInt();
+            numberOfTokens = dataInputStream.readInt();
         } catch (IOException e) {
             // aggiungere log
         }
@@ -48,5 +56,22 @@ public class CollectionStatistics {
 
     public static long getDocumentsLen() {
         return documentsLen;
+    }
+
+    public static void setLongestTerm(int length) {
+        if (length > lengthLongestTerm)
+            lengthLongestTerm = length;
+    }
+
+    public static int getLongestTermLength() {
+        return lengthLongestTerm;
+    }
+
+    public static void setNumberOfToken(int length) {
+        numberOfTokens = length;
+    }
+
+    public static int getNumberOfTokens() {
+        return numberOfTokens;
     }
 }

@@ -6,6 +6,7 @@ public class Configuration {
 
     public static final String DOCUMENT_IDS_PATH = "data/invertedIndex/document_ids.dat";
     public static final String FREQUENCY_PATH = "data/invertedIndex/frequencies.dat";
+    public static final String LEXICON_PATH = "data/invertedIndex/lexicon.dat";
 
 
     public static boolean isCOMPRESSED() {

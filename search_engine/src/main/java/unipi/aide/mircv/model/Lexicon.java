@@ -1,13 +1,15 @@
 package unipi.aide.mircv.model;
 
+import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.helpers.FileHelper;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Function;
 
 public class Lexicon {
-    private static final String FINAL_PATH = "data/invertedIndex/lexicon.dat";
+
     private static final String TEMP_DIR ="data/invertedIndex/temp/lexicon";
     
     private static int NUM_FILE_WRITTEN = 0;
@@ -16,7 +18,14 @@ public class Lexicon {
 
     private static Lexicon instance;
 
-    Lexicon(){
+    public static Lexicon getInstance(){
+        if(instance == null){
+            instance = new Lexicon();
+        }
+        return instance;
+    }
+
+    private Lexicon(){
         entries = new TreeMap<>();
     }
 
@@ -56,7 +65,7 @@ public class Lexicon {
         return dataInputStreams;
     }
 
-    public static LexiconEntry readEntry(DataInputStream partialLexiconStream,String token) {
+    public static LexiconEntry readEntry(DataInputStream partialLexiconStream) {
         LexiconEntry lexiconEntry = new LexiconEntry();
         try {
             lexiconEntry.setDf(partialLexiconStream.readInt());
@@ -75,7 +84,10 @@ public class Lexicon {
     }
 
     public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        return valueExtractor.apply(instance.getEntry(term));
+        LexiconEntry lexiconEntry = instance.getEntry(term);
+        if (lexiconEntry!= null)
+            return valueExtractor.apply(lexiconEntry);
+        return null;
     }
 
     public boolean contains(String token) {
@@ -83,7 +95,50 @@ public class Lexicon {
     }
 
     public LexiconEntry getEntry(String token) {
-        return entries.get(token);
+        LexiconEntry res = entries.get(token);
+        if(res==null){
+            res = getEntryFromDisk(token);
+        }
+        return res;
+    }
+
+    private LexiconEntry getEntryFromDisk(String targetToken) {
+        int entrySize = (CollectionStatistics.getLongestTermLength() + 28);
+        long low = 0;
+        long high = CollectionStatistics.getNumberOfTokens();
+        long mid = (low + high) >>> 1;
+
+        try(RandomAccessFile file = new RandomAccessFile(Configuration.LEXICON_PATH, "r")){
+            while (low <= high) {
+                mid = (low + high) >>> 1;
+
+                // Posizionati alla metà del record più vicino
+                file.seek(mid*entrySize);
+
+                // Leggi il record effettivo
+                byte[] recordBytes = new byte[CollectionStatistics.getLongestTermLength()];
+                file.read(recordBytes);
+
+                // Converte il record in stringa
+                String currentToken = new String(recordBytes, StandardCharsets.UTF_8).trim();
+
+                int compareResult = currentToken.compareTo(targetToken);
+
+                if (compareResult == 0) {
+                    return new LexiconEntry(file.readInt(), file.readDouble(), file.readInt(),
+                            file.readInt(), file.readInt(), file.readInt());
+                } else if (compareResult < 0) {
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+            }
+
+
+        }catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return null;
     }
 
     public void add(String token) {
@@ -110,39 +165,59 @@ public class Lexicon {
         }
     }
 
-    public void writeToDisk(boolean is_merged) {
+    public static void writeToDisk(boolean is_merged) {
         String filename;
         if(is_merged) {
-            filename = FINAL_PATH;
-            instance = this;
+            filename = Configuration.LEXICON_PATH;
         }else {
             FileHelper.createDir(TEMP_DIR);
             filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
         try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file))) {
-            for (String key : entries.keySet()) {
-                dataOutputStream.writeUTF(key);
-                LexiconEntry tmp = entries.get(key);
+            for (String key : instance.entries.keySet()) {
+                if(is_merged)
+                    dataOutputStream.write(stringToArrayByteFixedDim(key,CollectionStatistics.getLongestTermLength()));
+                else
+                    dataOutputStream.writeUTF(key);
+                LexiconEntry tmp = instance.entries.get(key);
                 dataOutputStream.writeInt(tmp.getDf());
                 dataOutputStream.writeDouble(tmp.getIdf());
                 dataOutputStream.writeInt(tmp.getDocIdOffset());
                 dataOutputStream.writeInt(tmp.getFrequencyOffset());
                 dataOutputStream.writeInt(tmp.getNumBlocks());
                 dataOutputStream.writeInt(tmp.getSkipPointerOffset());
+                CollectionStatistics.setLongestTerm(key.length());
             }
             if (!is_merged)
                 NUM_FILE_WRITTEN++;
+            else
+                CollectionStatistics.setNumberOfToken(instance.entries.keySet().size());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static byte[] stringToArrayByteFixedDim(String key, int length) {
+        byte[] byteArray = new byte[length];
+        byte[] inputBytes = key.getBytes(StandardCharsets.UTF_8);
+
+        // Copia i byte della stringa di input nel byte array risultante
+        System.arraycopy(inputBytes, 0, byteArray, 0, Math.min(inputBytes.length, length));
+
+        // Aggiungi padding con spazi se la stringa è più corta della lunghezza desiderata
+        for (int i = inputBytes.length; i < length; i++) {
+            byteArray[i] = (byte) ' ';
+        }
+
+        return byteArray;
     }
 
     static Lexicon readFromDisk(int partition) {
         int i = 0;
         String filename;
         if(partition == -1) {
-            filename = FINAL_PATH;
+            filename = Configuration.LEXICON_PATH;
         }else {
             filename = TEMP_DIR + "/part" + i + ".dat";
         }
@@ -170,8 +245,8 @@ public class Lexicon {
         }
     }
 
-    public void clear() {
-        entries = new TreeMap<>();
+    public static void clear() {
+        instance.entries = new TreeMap<>();
     }
 
     public void add(String token, LexiconEntry lexiconEntry) {

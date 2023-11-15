@@ -19,7 +19,7 @@ public class InvertedIndex {
 
     private void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean compressed) throws IOException {
         PostingLists postingLists = new PostingLists();
-        Lexicon lexicon = new Lexicon();
+        Lexicon lexicon = Lexicon.getInstance();
         // Create a BufferedReader to read the file line by line
         BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // non dentro il try catch perhè la funzione è chiamata dentro un try catch, se chiudo
         // il flusso poi non posso scorrere un eventuale secondo file
@@ -64,8 +64,8 @@ public class InvertedIndex {
                 }
                 postingLists.sort();
                 postingLists.writeToDisk(compressed,lexicon);
-                lexicon.writeToDisk(false);
-                lexicon.clear();
+                Lexicon.writeToDisk(false);
+                Lexicon.clear();
                 postingLists = new PostingLists();
                 System.gc();
             }
@@ -86,7 +86,7 @@ public class InvertedIndex {
         //  2.4 se la posting list supera 2KB, allora fai più blocchi (usa gli skipping pointers e implementali)
         //  2.5 Scrivi su file e aggiorna gli offsett
         PostingLists mergedPostingLists = new PostingLists();
-        Lexicon mergedLexicon = new Lexicon();
+        Lexicon mergedLexicon = Lexicon.getInstance();
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
         String[] lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
         try (FileOutputStream docStream = new FileOutputStream(Configuration.DOCUMENT_IDS_PATH);
@@ -111,7 +111,7 @@ public class InvertedIndex {
                 List<PostingLists> postingLists = new ArrayList<>();
                 for (int i = 0; i < lowestTokens.length; i++) {
                     if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
-                        LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i],token);
+                        LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
                         if(tmp != null) {
                             df += tmp.getDf();
                             postingLists.add(new PostingLists().readFromDisk(token, i, tmp.getDocIdOffset(),

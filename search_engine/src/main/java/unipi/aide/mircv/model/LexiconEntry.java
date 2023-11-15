@@ -14,6 +14,15 @@ public class LexiconEntry {
         df = 1;
     }
 
+    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, int numBlocks, int skipPointerOffset) {
+        this.df = df;
+        this.idf = idf;
+        this.docIdOffset = docIdOffset;
+        this.frequencyOffset = frequencyOffset;
+        this.numBlocks = numBlocks;
+        this.skipPointerOffset = skipPointerOffset;
+    }
+
     public LexiconEntry updateDF(){
         df++;
         return this;
