@@ -2,6 +2,7 @@ package unipi.aide.mircv.parsing;
 
 import ca.rmen.porterstemmer.PorterStemmer;
 import unipi.aide.mircv.exceptions.PidNotFoundException;
+import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.ParsedDocument;
 
 import java.io.IOException;
@@ -40,6 +41,7 @@ public class Parser {
 
     // This method performs stemming on a list of tokens using PorterStemmer.
     private static List<String> stemming(List<String>  tokens) {
+        CustomLogger.info("Performing stemming");
         PorterStemmer porterStemmer = new PorterStemmer();
         List<String> stemmedTokens = new ArrayList<>();
         for(String token:tokens){
@@ -50,50 +52,52 @@ public class Parser {
 
     // This method filters out stopwords from a list of tokens.
     private static List<String> stopwords_filtering(List<String> tokens) {
+        CustomLogger.info("Performing stopwords filtering");
         List<String> stopwords = new ArrayList<>();
         try (Stream<String> lines = Files.lines(Paths.get(STOPWORDS_STRING_PATH))) {
             stopwords = lines.collect(Collectors.toList());
         } catch (IOException e) {
-            // ADD PRINT ERROR ON LOG_ERROR;
+            CustomLogger.error("Unable to perform stopwords filtering: file with stopwords not found");
         }
         for(int i = 0; i<tokens.size(); ){
-            if(stopwords.contains(tokens.get(i)))
-                    tokens.remove(tokens.get(i));
+            if(stopwords.contains(tokens.get(i)))       //is the current token a stopwords?
+                tokens.remove(tokens.get(i));
             else
                 i++;
         }
         return tokens;
     }
 
-    // This method removes invalid UTF-8 characters from a list of tokens.
+    // This method removes invalid UTF-8 characters and small tokens from a list of them.
     private static List<String> removeInvalidCharacters(List<String> tokens) {
+        CustomLogger.info("Removing invalid chars");
         ArrayList<String> cleanedTokens = new ArrayList<>();
-        Pattern pattern = Pattern.compile("[^\\x00-\\x7F]+");
+        Pattern pattern = Pattern.compile("[^\\x00-\\x7F]+");       // this regex match all the invalid UTF-8 char
         for(String token : tokens){
             Matcher matcher = pattern.matcher(token);
             String cleanedText = matcher.replaceAll("");
-            if (cleanedText.length() >= 2)
+            if (cleanedText.length() >= 2)                                 // also token with length < 2 are considered invalid, they could be single letters for example
                 cleanedTokens.add(cleanedText);
         }
         return cleanedTokens;
     }
 
     public static ParsedDocument parseDocument(String text, boolean parseFlag) throws PidNotFoundException {
-        String regex = "\\d+\\t";
+        String regex = "\\d+\\t";       // regex to find a sequence of number followed by a tab (our pid)
+
         Pattern pattern = Pattern.compile(regex);
-
         Matcher matcher = pattern.matcher(text);
-
         String pid;
 
         if (matcher.find()) {
-            pid = matcher.group(0).replace("\t", "");
+            pid = matcher.group(0).replace("\t", "");       // get the PID
         }else{
-            throw new PidNotFoundException();
+            throw new PidNotFoundException();                               // if the regex doesn't match, throw the exception
         }
 
         text = text.substring(matcher.end());
 
-        return new ParsedDocument(pid,getTokens(text,parseFlag));
+        // function getTokens: if needed perform stemming and stopwrods filtering
+        return new ParsedDocument(pid,getTokens(text,parseFlag));           // return a class containing pid and the tokens
     }
 }

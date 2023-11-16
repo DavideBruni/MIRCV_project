@@ -2,7 +2,6 @@ package unipi.aide.mircv.queryProcessor;
 
 import unipi.aide.mircv.model.Lexicon;
 import unipi.aide.mircv.model.PostingList;
-import unipi.aide.mircv.model.PostingLists;
 import unipi.aide.mircv.parsing.Parser;
 
 import java.util.ArrayList;
@@ -58,7 +57,7 @@ public class QueryProcessorMain {
     private static PostingList[] getPostingLists(List<String> terms) {
         List<PostingList> postingLists = new ArrayList<>();
         for(String term : terms){
-            //
+            postingLists.add(new PostingList(term));
         }
         return (PostingList[]) postingLists.toArray();
     }

@@ -13,6 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class PostingList {
+
+    private static final String TEMP_DOC_ID_DIR ="data/invertedIndex/temp/docIds";
+    private static final String TEMP_FREQ_DIR ="data/invertedIndex/temp/frequencies";
+
     List<Posting> postingList;
     // score
     String term;
@@ -39,6 +43,53 @@ public class PostingList {
         inMemory = true;
         this.term = term;
 
+    }
+
+
+    /***
+     * This method read the postingList of a token
+     *
+     * @param token
+     * @param partition
+     * @param docIdOffset
+     * @param frequencyOffset
+     * @param numberOfPosting
+     * @param compressed
+     * @return
+     */
+    public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int numberOfPosting, boolean compressed) {
+        PostingList res;
+        try (FileInputStream docStream = new FileInputStream(TEMP_DOC_ID_DIR + "/part"+partition+".dat");
+             FileInputStream freqStream = new FileInputStream(TEMP_FREQ_DIR + "/part" + partition+".dat")){
+            res = new PostingList(token);
+            if (!compressed) {
+                DataInputStream dis_docStream = new DataInputStream(docStream);
+                DataInputStream dis_freqStream = new DataInputStream(freqStream);
+                dis_docStream.skipBytes(docIdOffset);
+                dis_freqStream.skipBytes(frequencyOffset);
+                for (int i = 0; i < numberOfPosting; i++) {
+                    try {
+                        long docId = dis_docStream.readLong();
+                        int frq = dis_freqStream.readInt();
+                        res.add(new Posting(docId,frq));
+                    } catch (EOFException eof) {
+                        break;
+                    }
+                }
+                dis_docStream.close();
+                dis_freqStream.close();
+            }else{
+                List<Long> docIds = EliasFano.decompress(docStream, docIdOffset);
+                List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream,frequencyOffset,docIds.size());
+                for(int i = 0; i<docIds.size(); i++){
+                    res.add(new Posting(docIds.get(i),frequency.get(i)));
+                }
+            }
+
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return res;
     }
 
 

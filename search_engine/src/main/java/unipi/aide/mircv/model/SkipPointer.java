@@ -62,16 +62,8 @@ public class SkipPointer {
         return maxDocId;
     }
 
-    public void setMaxDocId(long maxDocId) {
-        this.maxDocId = maxDocId;
-    }
-
     public int getDocIdsOffset() {
         return docIdsOffset;
-    }
-
-    public void setDocIdsOffset(int docIdsOffset) {
-        this.docIdsOffset = docIdsOffset;
     }
 
     public int getFrequencyOffset() {
@@ -82,16 +74,8 @@ public class SkipPointer {
         return numDocId;
     }
 
-    public void setNumDocId(int numDocId) {
-        this.numDocId = numDocId;
-    }
-
-    public static int getByteWritten() {
-        return BYTE_WRITTEN;
-    }
-
-    public static void setByteWritten(int byteWritten) {
-        BYTE_WRITTEN = byteWritten;
+    public void setMaxDocId(long docid) {
+        maxDocId = docid;
     }
 
     // altro non sarà che un file che contiene i descrittori dei blocchi della posting list, nel caso in cui ce ne sia più di uno

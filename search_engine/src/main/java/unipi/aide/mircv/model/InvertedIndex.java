@@ -3,43 +3,62 @@ package unipi.aide.mircv.model;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.PidNotFoundException;
+import unipi.aide.mircv.exceptions.PostingListStoreException;
 import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
+import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.parsing.Parser;
 import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 
 public class InvertedIndex {
 
-
-    private boolean allDocumentProcessed;
-    private final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
+    private static boolean allDocumentProcessed;
+    private static final long MEMORY_THRESHOLD = Runtime.getRuntime().totalMemory() * 20 / 100; // leave 20% of memory free
     private static long lastDocId = 0;
 
-    private void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean compressed) throws IOException {
+    /***
+     *
+     * @param tarIn         TarInputStream from which read the collection
+     * @param parse         indicate if perform stemming and stopwords filtering
+     * @throws IOException
+     */
+    private static void SPIMI(TarArchiveInputStream tarIn, boolean parse) throws IOException {
+        CustomLogger.info("Start SPIMI algorithm");
         PostingLists postingLists = new PostingLists();
         Lexicon lexicon = Lexicon.getInstance();
         // Create a BufferedReader to read the file line by line
-        BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // non dentro il try catch perhè la funzione è chiamata dentro un try catch, se chiudo
-        // il flusso poi non posso scorrere un eventuale secondo file
+        BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // since the function is called inside another try catch, I cannot do this inside the try catch with resource, because I don't have to close the stream
         try{
             while (!allDocumentProcessed){
-                while (Runtime.getRuntime().freeMemory() > MEMORY_THRESHOLD) { //build index until 80% of total memory is used
+                while (Runtime.getRuntime().freeMemory() > MEMORY_THRESHOLD) {      // build index until 80% of total memory is used
+                    CustomLogger.info("Reading new document...");
                     String line;
                     if ((line = reader.readLine()) != null) {
                         if (line.isBlank()){             // if the line read is empty, skip it
+                            CustomLogger.info("Document is empty, skipped");
                             continue;
                         }
 
-                        // if flag is set, remove stopwords and perform stemming
-                        ParsedDocument parsedDocument = Parser.parseDocument(line, parse);
-
+                        ParsedDocument parsedDocument;
+                        CustomLogger.info("Parsing document (candidate id "+lastDocId+"), searching PID and getting tokens");
+                        try {
+                            // if flag is set, remove stopwords and perform stemming
+                            parsedDocument = Parser.parseDocument(line, parse);
+                        }catch (PidNotFoundException pe){
+                            CustomLogger.error("PID not found for the current document, skip it");
+                            continue;
+                        }
                         String pid = parsedDocument.getPid();
+
                         List<String> tokens = parsedDocument.getTokens();
 
                         int docLen = tokens.size();
 
+                        // adding documentLen (number of tokens) and mapping between docno and docId to documentIndex.
                         DocumentIndex.add(++lastDocId, pid, docLen);
 
                         //update collection statistics
@@ -47,35 +66,42 @@ public class InvertedIndex {
                         CollectionStatistics.updateCollectionSize();
 
                         Set<String> uniqueTerms = new HashSet<>(tokens);
-
                         for(String token : uniqueTerms){
-                            if(! lexicon.contains(token)){
+                            if(! lexicon.contains(token)){      // check if the lexicon contains the current token
                                 lexicon.add(token);
                             }else{
-                                lexicon.updateDf(token);
+                                lexicon.updateDf(token);        // if yes, we update the documentFrequency of the term
                             }
+                            // create a new Posting and add it to the postingList of the term "token"
                             postingLists.add(lastDocId, token, Collections.frequency(tokens,token));
                         }
                     }else{
                         allDocumentProcessed = true;
+                        CustomLogger.info("All document have been processed");
                         break;
-                        // TODO add print and log
                     }
                 }
+                CustomLogger.info("Sorting posting lists generated (last document id was "+ lastDocId+") and write them on disk");
                 postingLists.sort();
-                postingLists.writeToDisk(compressed);
+                try {
+                    CustomLogger.info("Writing lexicon on disk");
+                    postingLists.writeToDisk(Configuration.isCOMPRESSED());
+                }catch (PostingListStoreException pe){
+                    break;
+                }
+
                 Lexicon.writeToDisk(false);
                 Lexicon.clear();
                 postingLists = new PostingLists();
                 System.gc();
             }
-        }catch (PidNotFoundException | UnableToAddDocumentIndexException e) {
-            throw new RuntimeException(e);
+        }catch(UnableToAddDocumentIndexException docIndExc){
+            CustomLogger.error("Error while adding a row to DocumentIndex. Aborting index creation");
         }
 
     }
 
-    private void Merge(boolean compressed){
+    private static void Merge(){
         // leggere più di un inverted index per volta
         //  1. Tengo aperto uno Stream per ogni Lexicon
         //  2. Cerco il token più "piccolo"
@@ -108,26 +134,27 @@ public class InvertedIndex {
                 int df = 0;
                 double idf;
                 // recupero le posting list --> recupero le posting!
-                List<PostingLists> postingLists = new ArrayList<>();
+                List<PostingList> postingLists = new ArrayList<>();
+                CustomLogger.info("Retrieving all the posting list for token '" + token +"'");
                 for (int i = 0; i < lowestTokens.length; i++) {
                     if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
                         LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
                         if(tmp != null) {
                             df += tmp.getDf();
-                            postingLists.add(new PostingLists().readFromDisk(token, i, tmp.getDocIdOffset(),
-                                    tmp.getFrequencyOffset(),tmp.getPostingNumber(),compressed));
+                            postingLists.add(new PostingList().readFromDisk(token, i, tmp.getDocIdOffset(),
+                                    tmp.getFrequencyOffset(),tmp.getPostingNumber(),Configuration.isCOMPRESSED()));
                             lowestTokens[i] = null;
                         }
                     }
                 }
-                // creo un'unica posting list
+                CustomLogger.info("Merging posting lists together");
                 mergedPostingLists.add(postingLists, token);
                 // aggiorna l'entry del vocabolario
                 idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
                 lexiconEntry.setDf(df);
                 lexiconEntry.setIdf(idf);
                 // scrivere in docId, in frequency e lexicon
-                if (!compressed) {
+                if (!Configuration.isCOMPRESSED()) {
                     DataOutputStream dos_docStream = new DataOutputStream(docStream);
                     DataOutputStream dos_freqStream = new DataOutputStream(freqStream);
                     offset = mergedPostingLists.writeToDiskNotCompressed(dos_docStream,dos_freqStream,offset, true);
@@ -152,7 +179,7 @@ public class InvertedIndex {
         closeStreams(partialLexiconStreams);
     }
 
-    private void closeStreams(InputStream[] partialLexiconStreams) {
+    private static void closeStreams(InputStream[] partialLexiconStreams) {
         for(InputStream stream : partialLexiconStreams){
             try {
                 stream.close();
@@ -162,7 +189,7 @@ public class InvertedIndex {
         }
     }
 
-    private String findLowerToken(String[] tokens){
+    private static String findLowerToken(String[] tokens){
         String minTerm = null;
         for(String token : tokens){
             if (token != null) {
@@ -175,14 +202,48 @@ public class InvertedIndex {
         return minTerm;
     }
 
+    private static void removeAllTemporaryDir(String rootDirectory) {
+        Path directory = Paths.get(rootDirectory);
+        try {
+            Files.walkFileTree(directory, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs){
+                    return FileVisitResult.CONTINUE; // Do nothing if visiting a file
+                }
 
-    public InvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse, boolean compressed) throws IOException {
-        SPIMI(tarArchiveInputStream, parse, compressed);
-        if(!allDocumentProcessed){
-            //fai qualcosa
-        }else{
-            Merge(compressed);
+                @Override
+                public FileVisitResult visitFileFailed(Path file, IOException exc){
+                    CustomLogger.error("Error while visiting file "+file); //handle errors
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                    if (dir.getFileName().toString().equals("temp")) {  //deleting temp dir
+                        Files.delete(dir);
+                        CustomLogger.info("Directory deleted: " + dir);
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            CustomLogger.error("Error while removing temp directories ");
         }
-        CollectionStatistics.writeToDisk();
     }
+
+
+
+
+    public static void createInvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse) throws IOException {
+        SPIMI(tarArchiveInputStream, parse);
+        if(!allDocumentProcessed){
+            CustomLogger.error("Index Creation aborted, read the log to find the cause");
+        }else{
+            Merge();
+            CollectionStatistics.writeToDisk();
+        }
+        removeAllTemporaryDir(Configuration.ROOT_DIRECTORY);
+    }
+
+
 }
