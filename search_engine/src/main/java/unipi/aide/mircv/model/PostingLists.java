@@ -90,7 +90,7 @@ public class PostingLists {
         );
     }
 
-    public void writeToDisk(boolean compressed, Lexicon lexicon) {
+    public void writeToDisk(boolean compressed) {
         FileHelper.createDir(TEMP_DOC_ID_DIR);
         FileHelper.createDir(TEMP_FREQ_DIR);
 
@@ -99,10 +99,10 @@ public class PostingLists {
             if (!compressed){
                 try(DataOutputStream docStream_dos = new DataOutputStream(docStream);
                     DataOutputStream freqStream_dos = new DataOutputStream(freqStream)) {
-                        writeToDiskNotCompressed(lexicon, docStream_dos, freqStream_dos, 0, false);
+                        writeToDiskNotCompressed(docStream_dos, freqStream_dos, 0, false);
                 }
             }else{
-                writeToDiskCompressed(lexicon, docStream, freqStream,0, 0, false);
+                writeToDiskCompressed(docStream, freqStream,0, 0, false);
             }
             NUM_FILE_WRITTEN++;
         } catch (IOException e) {
@@ -112,8 +112,8 @@ public class PostingLists {
 
     }
 
-    public int[] writeToDiskCompressed(Lexicon lexicon, FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset, boolean is_merged) throws IOException {
-        int offsets [] = new int[]{docOffset,freqOffset};
+    public int[] writeToDiskCompressed(FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset, boolean is_merged) throws IOException {
+        int[] offsets = new int[]{docOffset,freqOffset};
 
         for(String token: postings.keySet()){
             List<List<Posting>> postingListsToCompress = new ArrayList<>();
@@ -123,7 +123,7 @@ public class PostingLists {
             long n = postingLists.size();
 
             // Need Skipping Pointer
-            LexiconEntry lexiconEntry = lexicon.getEntry(token);
+            LexiconEntry lexiconEntry = Lexicon.getEntry(token);
             List<SkipPointer> skipPointers = new ArrayList<>();
 
             if(is_merged && ((n*Math.ceil(Math.log(U/(double)n) / Math.log(2.0)) +2*n)/8 > POSTING_SIZE_THRESHOLD)){
@@ -136,10 +136,9 @@ public class PostingLists {
             if(skipPointers.size() > 1) {
                 int numBlocks = SkipPointer.write(skipPointers, lexiconEntry);
                 lexiconEntry.setNumBlocks(numBlocks);
-                lexicon.setEntry(token, lexiconEntry);
             }
 
-            lexicon.setEntry(token,lexiconEntry);
+            Lexicon.setEntry(token,lexiconEntry);
 
         }
         return offsets;
@@ -192,22 +191,22 @@ public class PostingLists {
         }
     }
 
-    public int writeToDiskNotCompressed(Lexicon lexicon, DataOutputStream docIdStream, DataOutputStream frequencyStream, int offset, boolean is_merged) throws IOException {
+    public int writeToDiskNotCompressed(DataOutputStream docIdStream, DataOutputStream frequencyStream, int offset, boolean is_merged) throws IOException {
         for(String token: postings.keySet()){
             List<Posting> postingLists = postings.get(token).getPostingList();
-            lexicon.updateDocIdOffset(token, offset * Long.BYTES);
-            lexicon.updateFrequencyOffset(token, offset * Integer.BYTES);
+            Lexicon.updateDocIdOffset(token, offset * Long.BYTES);
+            Lexicon.updateFrequencyOffset(token, offset * Integer.BYTES);
             if (is_merged && postingLists.size() * (Long.BYTES + Integer.BYTES) > POSTING_SIZE_THRESHOLD){
-                LexiconEntry lexiconEntry = lexicon.getEntry(token);
+                LexiconEntry lexiconEntry = Lexicon.getEntry(token);
                 addSkipPointers(token, lexiconEntry);
-                lexicon.setEntry(token,lexiconEntry);
+                Lexicon.setEntry(token,lexiconEntry);
             }
             for (Posting posting : postingLists) {
                 docIdStream.writeLong(posting.docid);
                 frequencyStream.writeInt(posting.frequency);
                 offset++;
             }
-            lexicon.setNumberOfPostings(token,postingLists.size());
+            Lexicon.setNumberOfPostings(token,postingLists.size());
         }
         try {
             docIdStream.close();

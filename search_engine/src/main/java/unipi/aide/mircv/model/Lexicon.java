@@ -84,7 +84,7 @@ public class Lexicon {
     }
 
     public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        LexiconEntry lexiconEntry = instance.getEntry(term);
+        LexiconEntry lexiconEntry = getEntry(term);
         if (lexiconEntry!= null)
             return valueExtractor.apply(lexiconEntry);
         return null;
@@ -94,19 +94,19 @@ public class Lexicon {
         return entries.containsKey(token);
     }
 
-    public LexiconEntry getEntry(String token) {
-        LexiconEntry res = entries.get(token);
+    public static LexiconEntry getEntry(String token) {
+        LexiconEntry res = instance.entries.get(token);
         if(res==null){
             res = getEntryFromDisk(token);
         }
         return res;
     }
 
-    private LexiconEntry getEntryFromDisk(String targetToken) {
+    private static LexiconEntry getEntryFromDisk(String targetToken) {
         int entrySize = (CollectionStatistics.getLongestTermLength() + 28);
         long low = 0;
         long high = CollectionStatistics.getNumberOfTokens();
-        long mid = (low + high) >>> 1;
+        long mid;
 
         try(RandomAccessFile file = new RandomAccessFile(Configuration.LEXICON_PATH, "r")){
             while (low <= high) {
@@ -149,19 +149,19 @@ public class Lexicon {
         entries.put(token, entries.get(token).updateDF());
     }
 
-    public void updateDocIdOffset(String token, int offset) {
-        if (contains(token)) {
-            LexiconEntry tmp = entries.get(token);
+    public static void updateDocIdOffset(String token, int offset) {
+        if (instance.contains(token)) {
+            LexiconEntry tmp = instance.entries.get(token);
             tmp.setDocIdOffset(offset);
-            entries.put(token,tmp);
+            instance.entries.put(token,tmp);
         }
     }
 
-    public void updateFrequencyOffset(String token, int offset) {
-        if (contains(token)) {
-            LexiconEntry tmp = entries.get(token);
+    public static void updateFrequencyOffset(String token, int offset) {
+        if (instance.contains(token)) {
+            LexiconEntry tmp = instance.entries.get(token);
             tmp.setFrequencyOffset(offset);
-            entries.put(token,tmp);
+            instance.entries.put(token,tmp);
         }
     }
 
@@ -174,7 +174,7 @@ public class Lexicon {
             filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
-        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file))) {
+        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file,true))) {
             for (String key : instance.entries.keySet()) {
                 if(is_merged)
                     dataOutputStream.write(stringToArrayByteFixedDim(key,CollectionStatistics.getLongestTermLength()));
@@ -263,11 +263,15 @@ public class Lexicon {
         }
     }
 
-    public void setEntry(String token, LexiconEntry lexiconEntry){
-        entries.put(token,lexiconEntry);
+    public static void setEntry(String token, LexiconEntry lexiconEntry){
+        instance.entries.put(token,lexiconEntry);
     }
 
-    public void setNumberOfPostings(String token, int size) {
-        entries.get(token).setPostingNumber(size);
+    public static void setNumberOfPostings(String token, int size) {
+        instance.entries.get(token).setPostingNumber(size);
+    }
+
+    public int numberOfEntries() {
+        return instance.entries.entrySet().size();
     }
 }

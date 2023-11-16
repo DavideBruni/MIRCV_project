@@ -63,7 +63,7 @@ public class InvertedIndex {
                     }
                 }
                 postingLists.sort();
-                postingLists.writeToDisk(compressed,lexicon);
+                postingLists.writeToDisk(compressed);
                 Lexicon.writeToDisk(false);
                 Lexicon.clear();
                 postingLists = new PostingLists();
@@ -130,20 +130,25 @@ public class InvertedIndex {
                 if (!compressed) {
                     DataOutputStream dos_docStream = new DataOutputStream(docStream);
                     DataOutputStream dos_freqStream = new DataOutputStream(freqStream);
-                    offset = mergedPostingLists.writeToDiskNotCompressed(mergedLexicon,dos_docStream,dos_freqStream,offset, true);
+                    offset = mergedPostingLists.writeToDiskNotCompressed(dos_docStream,dos_freqStream,offset, true);
                 }else{
-                    compressed_offset = mergedPostingLists.writeToDiskCompressed(mergedLexicon,docStream,freqStream,compressed_offset[0],compressed_offset[0],true);
+                    compressed_offset = mergedPostingLists.writeToDiskCompressed(docStream,freqStream,compressed_offset[0],compressed_offset[0],true);
                 }
                 Scorer.BM25_termUpperBound(mergedPostingLists.postings.get(token),lexiconEntry);
                 mergedLexicon.add(token, lexiconEntry);
                 mergedPostingLists = new PostingLists();
+                if(Lexicon.getInstance().numberOfEntries() >= 30){     //28 byte + dim parola
+                    // every 30 entries write to disk
+                    Lexicon.writeToDisk(true);
+                    Lexicon.clear();
+                }
             }
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
-        mergedLexicon.writeToDisk(true);
+        Lexicon.writeToDisk(true);
         closeStreams(partialLexiconStreams);
     }
 
