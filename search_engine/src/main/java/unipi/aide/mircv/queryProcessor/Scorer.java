@@ -2,8 +2,10 @@ package unipi.aide.mircv.queryProcessor;
 
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.DocumentNotFoundException;
+import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.*;
 
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 
@@ -12,12 +14,26 @@ public class Scorer {
     private static final double NORMALIZATION_PARAMETER_K1 = 1.5;
 
 
+    /**
+     * Calculates the BM25 score for a single term in a document.
+     *
+     * @param tf     The term frequency (number of occurrences) of the term in the document.
+     * @param docId  The identifier of the document.
+     * @param idf    The inverse document frequency of the term.
+     * @return The BM25 score for the term in the specified document.
+     */
     public static double BM25_singleTermDocumentScore(int tf, long docId, double idf) throws DocumentNotFoundException,ArithmeticException {
         int documentLength = DocumentIndex.getDocumentLength(docId);
         double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
         return (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
     }
 
+    /**
+     * Calculates the upper bound of BM25 scores for a term in a posting list and set it in provided LexiconEntry.
+     *
+     * @param postingList   The posting list containing the term occurrences.
+     * @param lexiconEntry  The LexiconEntry corresponding to the term.
+     */
     public static void BM25_termUpperBound(PostingList postingList, LexiconEntry lexiconEntry){
         double maxScore = 0.0;
         for(Posting posting : postingList.getPostingList()){
@@ -29,12 +45,21 @@ public class Scorer {
                 if (score > maxScore)
                     maxScore = score;
             } catch (DocumentNotFoundException e) {
-
+                CustomLogger.error("Document "+posting.getDocid()+ " not found");
             }
         }
         lexiconEntry.setTermUpperBound(maxScore);
     }
 
+    /**
+     * Computes the maximum scores for a set of posting lists using the MAX-SCORE algorithm.
+     * The method returns a priority queue containing DocScorePair objects representing
+     * the documents with the highest scores.
+     *
+     * @param postingLists An array of posting lists.
+     * @return A priority queue of DocScorePair objects sorted by descending scores.
+     *         The queue contains the documents with the highest scores, limited by the configured minHeapSize.
+     */
     public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists) {
         PriorityQueue<DocScorePair> q = new PriorityQueue<>(Comparator.comparingDouble(DocScorePair::getScore));
         int minHeapSize = Configuration.getMinheapDimension();
@@ -42,7 +67,7 @@ public class Scorer {
         upperBounds[0] = postingLists[0].getTermUpperBound();
 
         for (int i = 1; i < postingLists.length; i++) {
-            upperBounds[i] = upperBounds[i - 1] + postingLists[i].getTermUpperBound();
+            upperBounds[i] = upperBounds[i - 1] + postingLists[i].getTermUpperBound();      //necessary to understand if the posting list is essential or not
         }
 
         double theta = 0;
@@ -57,10 +82,14 @@ public class Scorer {
                 long minDocIdUsed = postingLists[i].docId();
                 if (minDocIdUsed == current) {
                     score += postingLists[i].score();
-                    postingLists[i].next();
+                    try {
+                        postingLists[i].next();
+                    }catch (IOException e){
+                        CustomLogger.error("Error calling next() function: "+e.getMessage());
+                    }
                 }
 
-                if (postingLists[i].docId() < next) {
+                if (postingLists[i].docId() < next) {       // if the current docId is lower than the candidate next, update the candidate next
                     next = postingLists[i].docId();
                 }
             }

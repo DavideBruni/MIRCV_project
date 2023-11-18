@@ -13,7 +13,7 @@ public class EliasFanoCompressedList {
 
     private List<BitSet> highbits;
     private List<BitSet> lowbits;
-    // dato che questi vettori mi servono sia per ottenere la lunghezza, che per poterli scrivere su file, preferisco calcolarli in precedenza
+    // since I need these vectors both to obtain the length and to be able to write them to a file, I prefer to calculate them previously
     private List<byte[]> highBitsAsByteArray;
     private List<byte[]> lowBitsAsByteArray;
     private int lowBits_len;
@@ -33,6 +33,12 @@ public class EliasFanoCompressedList {
         }
     }
 
+    /**
+     * Writes the data of the Elias-Fano compressed docIds to the specified FileOutputStream.
+     * The data includes the lengths and values of highBits and lowBits arrays.
+     *
+     * @param stream The FileOutputStream.
+     */
     public void writeToDisk(FileOutputStream stream) throws IOException {
         StreamHelper.writeInt(stream, highbits.size());      //  write the length of highBits (how many cluster)
         for(byte[] highBits : highBitsAsByteArray){

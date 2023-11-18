@@ -9,6 +9,8 @@ import unipi.aide.mircv.model.InvertedIndex;
 
 import java.io.*;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.format.DateTimeFormatter;
 
 public class IndexingMain {
 
@@ -28,6 +30,7 @@ public class IndexingMain {
             CustomLogger.configureFileLogger(args[3]);
         Configuration.setCOMPRESSED(Boolean.parseBoolean(args[2]));
         Path filePath = Path.of(args[0]);
+        boolean parse = Boolean.parseBoolean(args[1]);
 
         // Read from compressed file and automatic handle file closure
         try (FileInputStream fis = new FileInputStream(filePath.toFile());
@@ -36,7 +39,16 @@ public class IndexingMain {
             while ((entry = tarIn.getNextTarEntry()) != null) {     //read each file of the tar.gz archive
                 // supposition: we have only one file, if not, the following if and the variable TSV_FILE_NAME must be changed
                 if (entry.getName().equals(TSV_FILE_NAME)) {        // searching for the file with the name TSV_FILE_NAME
-                    InvertedIndex.createInvertedIndex(tarIn, Boolean.FALSE);
+                    // Get the current timestamp in milliseconds
+                    long timestamp_start = System.currentTimeMillis();
+                    InvertedIndex.createInvertedIndex(tarIn, parse);
+                    long timestamp_stop = System.currentTimeMillis();
+                    CustomLogger.info("Index created in: "+(timestamp_stop-timestamp_start)+" milliseconds");
+                    Duration duration = Duration.ofMillis(timestamp_stop-timestamp_start);
+
+                    // Format the duration as "HH:mm:ss:SSS"
+                    String formattedTime = String.format("%02d:%02d:%02d:%03d",duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart(), duration.toMillisPart());
+                    CustomLogger.info(formattedTime);
                 }
             }
         } catch (FileNotFoundException e) {

@@ -11,12 +11,12 @@ public class UnaryCompressor {
 
     public static List<BitSet> compress(int[] clusters, int numBits) {
         List<BitSet> res = new ArrayList<>();
-        for(int i = 0; i<clusters.length; i++){        //dato che lo 0 deve essere rappresentato come 0, verranno settati n bit a 1
+        for(int i = 0; i<clusters.length; i++){        // since 0 must be represente as 0, I have to n bit
             BitSet tmp = new BitSet(numBits);
             try {
-                tmp.set(1, clusters[i]+1);
+                tmp.set(1, clusters[i]+1);          //the L.S.b. must be 0
             }catch(IndexOutOfBoundsException ex){
-                // se il clusters[i] è 0 (ovvero non ci sono numeri di quel cluster), verrà generata questa eccezione
+                // if the clusters[i] is 0 (i.e. there are no numbers of that cluster), this exception will be thrown
             }
             res.add(tmp);
         }
@@ -32,7 +32,7 @@ public class UnaryCompressor {
                 tmp.set(1, postingList.get(i).frequency+1);
                 res.add(tmp);
             }catch(IndexOutOfBoundsException ex){
-                // se il clusters[i] è 0 (ovvero non ci sono numeri di quel cluster), verrà generata questa eccezione
+                // if the clusters[i] is 0 (i.e. there are no numbers of that cluster), this exception will be thrown
             }
         }
         return res;

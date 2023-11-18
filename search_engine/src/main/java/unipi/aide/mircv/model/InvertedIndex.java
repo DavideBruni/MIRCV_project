@@ -2,9 +2,7 @@ package unipi.aide.mircv.model;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import unipi.aide.mircv.configuration.Configuration;
-import unipi.aide.mircv.exceptions.PidNotFoundException;
-import unipi.aide.mircv.exceptions.PostingListStoreException;
-import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
+import unipi.aide.mircv.exceptions.*;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.parsing.Parser;
 import unipi.aide.mircv.queryProcessor.Scorer;
@@ -24,7 +22,6 @@ public class InvertedIndex {
      *
      * @param tarIn         TarInputStream from which read the collection
      * @param parse         indicate if perform stemming and stopwords filtering
-     * @throws IOException
      */
     private static void SPIMI(TarArchiveInputStream tarIn, boolean parse) throws IOException {
         CustomLogger.info("Start SPIMI algorithm");
@@ -97,63 +94,71 @@ public class InvertedIndex {
             }
         }catch(UnableToAddDocumentIndexException docIndExc){
             CustomLogger.error("Error while adding a row to DocumentIndex. Aborting index creation");
+        } catch (UnableToWriteLexiconException e) {
+            CustomLogger.error("Error while storing the Lexicon. Aborting index creation");
         }
 
     }
 
-    private static void Merge(){
-        // leggere più di un inverted index per volta
-        //  1. Tengo aperto uno Stream per ogni Lexicon
+    private static void Merge() {
         //  2. Cerco il token più "piccolo"
         //  2.1 Scrivi l'entrata nel nuovo Lexicon
         //  2.2 Calcola il nuovo df (somma) e idf log(N/df) dove N è il CollectionSize
         //  2.3 Recupera le varie posting list
-        //  2.3.Crea la nuova posting list (docId e freqId) facendo attenzione all'ordinamento per docId (potrei buttare tutto dentro e poi ordinare)
-        //  2.4 se la posting list supera 2KB, allora fai più blocchi (usa gli skipping pointers e implementali)
+        //  2.3.Crea la nuova posting list (docId e freqId) facendo attenzione all'ordinamento per docId
+        //  2.4 se la posting list supera 2KB, allora fai più blocchi (usa gli skipping pointers)
         //  2.5 Scrivi su file e aggiorna gli offsett
         PostingLists mergedPostingLists = new PostingLists();
         Lexicon mergedLexicon = Lexicon.getInstance();
+        // 1. I have to keep open one stream for each lexicon partition
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
-        String[] lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
+        String[] lowestTokens;
+        try {
+            // 2. In order to find the "lowest" token, I read the smallest token for each stream, in this case, the firsts
+            lowestTokens = Lexicon.getFirstTokens(partialLexiconStreams);
+        }catch (PartialLexiconNotFoundException e ){
+            CustomLogger.error("Error in reading partial lexicons, aborting merging...");
+            closeStreams(partialLexiconStreams);
+            return;
+        }
         try (FileOutputStream docStream = new FileOutputStream(Configuration.DOCUMENT_IDS_PATH);
              FileOutputStream freqStream = new FileOutputStream(Configuration.FREQUENCY_PATH)){
-            // leggo per tutti i partial, solo la prima entrata e la salvo in un array di LExiconEntries
-            // recupero il token minore
-            // merge: quello che faccio ora + rimuovo dall'array quelli già analizzati
-            // fine ciclo
-            // per gli indici dove il valore della entry è null, leggo una nuova entry  (nella lettura gestire il case EOF e lasciare a null)
-            // (nel confronto gestire il null pointer exception quando accedo al token dell'entry)
             int offset = 0;
             int[] compressed_offset = new int[]{0,0};
-            // trovare il token minimo --> trovare i partialLexicons
             while(true) {
                 String token = findLowerToken(lowestTokens);
+                // if there's not a lower token, I merged them all
                 if (token == null)
                     break;
                 LexiconEntry lexiconEntry = new LexiconEntry();
                 int df = 0;
                 double idf;
-                // recupero le posting list --> recupero le posting!
                 List<PostingList> postingLists = new ArrayList<>();
                 CustomLogger.info("Retrieving all the posting list for token '" + token +"'");
                 for (int i = 0; i < lowestTokens.length; i++) {
-                    if (lowestTokens[i].equals(token)) {   // quali partizioni contengono minTerm)
+                    if (lowestTokens[i].equals(token)) {
+                        // I consider only partitions that have the lowest token (they could be more than 1)
                         LexiconEntry tmp = Lexicon.readEntry(partialLexiconStreams[i]);
                         if(tmp != null) {
                             df += tmp.getDf();
-                            postingLists.add(new PostingList().readFromDisk(token, i, tmp.getDocIdOffset(),
-                                    tmp.getFrequencyOffset(),tmp.getPostingNumber(),Configuration.isCOMPRESSED()));
-                            lowestTokens[i] = null;
+                            try {
+                                // if the term is present, I have to read the posting list from disk and accumulate them in a List of Posting list
+                                postingLists.add(new PostingList().readFromDisk(token, i, tmp.getDocIdOffset(),
+                                        tmp.getFrequencyOffset(), tmp.getPostingNumber(), Configuration.isCOMPRESSED()));
+                            }catch (NullPointerException npe){
+                                continue;
+                            }
+                            lowestTokens[i] = null;     //for this partition, I have to search another token
                         }
                     }
                 }
                 CustomLogger.info("Merging posting lists together");
                 mergedPostingLists.add(postingLists, token);
-                // aggiorna l'entry del vocabolario
+                // Update lexicon entry
                 idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
                 lexiconEntry.setDf(df);
                 lexiconEntry.setIdf(idf);
-                // scrivere in docId, in frequency e lexicon
+                // I have to store the merged posting list on disk
                 if (!Configuration.isCOMPRESSED()) {
                     DataOutputStream dos_docStream = new DataOutputStream(docStream);
                     DataOutputStream dos_freqStream = new DataOutputStream(freqStream);
@@ -165,17 +170,25 @@ public class InvertedIndex {
                 mergedLexicon.add(token, lexiconEntry);
                 mergedPostingLists = new PostingLists();
                 if(Lexicon.getInstance().numberOfEntries() >= 30){     //28 byte + dim parola
-                    // every 30 entries write to disk
+                    // every 30 entries write to disk, it's better than write every entry
                     Lexicon.writeToDisk(true);
                     Lexicon.clear();
                 }
+                Lexicon.getTokens(lowestTokens, partialLexiconStreams);
             }
 
-        } catch (IOException e) {
+        } catch (IOException | PartialLexiconNotFoundException | UnableToWriteLexiconException e) {
+            CustomLogger.error("Unable to merge Partial invertedIndex "+e);
             e.printStackTrace();
         }
 
-        Lexicon.writeToDisk(true);
+        try {
+            // since I write every 30 entries, if I don't have a number multiple of 30 I might not write a part of the lexicon
+            // anyway if the lexicon is empty, the writeToDisk function handle it and do nothing
+            Lexicon.writeToDisk(true);
+        } catch (UnableToWriteLexiconException e) {
+            throw new RuntimeException(e);
+        }
         closeStreams(partialLexiconStreams);
     }
 
@@ -184,11 +197,18 @@ public class InvertedIndex {
             try {
                 stream.close();
             } catch (IOException e) {
-                // add log
+                CustomLogger.error("Unable to close stream "+ e.getMessage());
             }
         }
     }
 
+    /**
+     * Finds and returns the lexicographically smallest non-null token from the given array of tokens.
+     * If the array is empty or contains only null elements, the method returns null.
+     *
+     * @param tokens An array of tokens to search for the lexicographically smallest non-null token.
+     * @return The lexicographically smallest non-null token, or null if the array is empty or contains only null elements.
+     */
     private static String findLowerToken(String[] tokens){
         String minTerm = null;
         for(String token : tokens){
@@ -233,7 +253,13 @@ public class InvertedIndex {
 
 
 
-
+    /**
+     * Creates an inverted index from a TarArchiveInputStream, using the SPIMI algorithm.
+     * The method processes the input stream, merges intermediate indices, and writes the final inverted index to disk.
+     *
+     * @param tarArchiveInputStream The input stream containing Tar archives of documents.
+     * @param parse                A boolean flag indicating whether to perform document parsing during the SPIMI phase.
+     */
     public static void createInvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse) throws IOException {
         SPIMI(tarArchiveInputStream, parse);
         if(!allDocumentProcessed){

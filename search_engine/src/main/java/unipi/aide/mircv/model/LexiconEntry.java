@@ -5,10 +5,10 @@ public class LexiconEntry {
     private double idf;
     private int docIdOffset;
     private int frequencyOffset;
-    private int postingNumber;
+    private int postingNumber;          // used in retrieve uncompressed postingList
     private int numBlocks = 1;
     private int skipPointerOffset;
-    private double termUpperBound;
+    private double termUpperBound;      // max score dynamic pruning
 
     public LexiconEntry(){
         df = 1;

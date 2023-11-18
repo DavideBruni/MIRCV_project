@@ -77,6 +77,4 @@ public class SkipPointer {
     public void setMaxDocId(long docid) {
         maxDocId = docid;
     }
-
-    // altro non sarà che un file che contiene i descrittori dei blocchi della posting list, nel caso in cui ce ne sia più di uno
 }

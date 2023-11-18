@@ -1,39 +1,49 @@
 package unipi.aide.mircv.queryProcessor;
 
+import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.Lexicon;
 import unipi.aide.mircv.model.PostingList;
 import unipi.aide.mircv.parsing.Parser;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.PriorityQueue;
-import java.util.Scanner;
+import java.util.*;
 
 public class QueryProcessorMain {
     public static void main( String[] args ){
-        if (args.length < 2 ) {
-            // Error in input parameters, write log
+        if (args.length < 3 ) {
+            System.err.println("Error in input parameters, parameters are:");
+            System.err.println("< parse document >       Boolean");
+            System.err.println("< compress index >       Boolean");
+            System.err.println("< k >                    Integer, how many results show");
             System.exit(-1);
         }
 
-        boolean parse = true;
-        boolean compressed = false;
+        boolean parse = Boolean.parseBoolean(args[0]);
+        Configuration.setCOMPRESSED(Boolean.parseBoolean(args[1]));
 
-        // Creare uno scanner per leggere da System.in (standard input)
+        Configuration.setMinheapDimension(Integer.parseInt(args[2]));
         Scanner scanner = new Scanner(System.in);
 
         while(true){
             System.out.println("Insert new query\n");
-
-            // Leggere la stringa dalla standard input
+            // Read query from stdin
             String query = scanner.nextLine();
+            //exit condition    CTRL+E
+            if(query.equals("\u0005"))
+                break;
 
+            long timestamp_start = System.currentTimeMillis();
             List<String> parsedQuery = Parser.getTokens(query,parse);
 
             PostingList[] postingLists = getPostingLists(parsedQuery);
             PriorityQueue<Scorer.DocScorePair> queryResult = null;
-            if (postingLists.length != 0)
+            if (postingLists.length != 0) {
+                // posting list must be sorted based on term upperBound
+                Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
+                        Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Arrays.sort(postingLists, termUpperBoundComparator);
                 queryResult = Scorer.maxScore(postingLists);
+            }
 
             // printing result
             if(queryResult == null){
@@ -41,24 +51,21 @@ public class QueryProcessorMain {
             }else{
                 System.out.println(queryResult + "\n\n");
             }
+            long timestamp_stop = System.currentTimeMillis();
+            CustomLogger.info("("+(timestamp_stop-timestamp_start)+" milliseconds )");
 
             Lexicon.clear();
 
-            //exit condition
-            if(query.equals('\u0005'))
-                break;
         }
-
-        // Chiudere lo scanner dopo l'uso
         scanner.close();
 
     }
 
     private static PostingList[] getPostingLists(List<String> terms) {
-        List<PostingList> postingLists = new ArrayList<>();
+        PostingList [] postingLists = new PostingList[terms.size()];
         for(String term : terms){
-            postingLists.add(new PostingList(term));
+            postingLists[terms.indexOf(term)] = new PostingList(term);
         }
-        return (PostingList[]) postingLists.toArray();
+        return postingLists;
     }
 }
