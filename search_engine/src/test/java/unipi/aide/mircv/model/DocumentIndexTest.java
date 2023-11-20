@@ -1,13 +1,18 @@
 package unipi.aide.mircv.model;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class DocumentIndexTest {
-
+    @BeforeAll
+    static void setTestRootPath(){
+        Configuration.setUpPaths("data/test");
+    }
     @Test
     void testAddAndRetrieveDocument() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
         long docid = 1;
@@ -37,7 +42,7 @@ class DocumentIndexTest {
     @Test
     void testGetDocumentLength() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
         long docid = 456;
-        String docno = "doc456";
+        String docno = "456";
         int docLen = 700;
 
         // Add a document to the index

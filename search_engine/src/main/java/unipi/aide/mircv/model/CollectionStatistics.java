@@ -1,6 +1,7 @@
 package unipi.aide.mircv.model;
 
 
+import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.MissingCollectionStatisticException;
 import unipi.aide.mircv.log.CustomLogger;
 
@@ -18,8 +19,6 @@ public class CollectionStatistics {
 
     private static int numberOfTokens;      // necessary to perform binary search on Lexicon
 
-    private static final String COLLECTION_STATISTICS_PATH = "data/invertedIndex/collectionStatistics.dat";  //Path to the collection size
-
     public static void updateDocumentsLen(int size) { documentsLen += size;}
 
     public static void updateCollectionSize() { collectionSize++; }
@@ -27,7 +26,7 @@ public class CollectionStatistics {
     public static int getCollectionSize(){ return collectionSize;}
 
     public static void writeToDisk() {
-        File file = new File(COLLECTION_STATISTICS_PATH);
+        File file = new File(Configuration.getCollectionStatisticsPath());
         try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file))) {
             dataOutputStream.writeInt(collectionSize);
             dataOutputStream.writeLong(lexiconSize);
@@ -41,7 +40,7 @@ public class CollectionStatistics {
     }
 
     public static void readFromDisk() throws MissingCollectionStatisticException {
-        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(COLLECTION_STATISTICS_PATH))) {
+        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(Configuration.getCollectionStatisticsPath()))) {
             collectionSize = dataInputStream.readInt();
             lexiconSize = dataInputStream.readLong();
             documentsLen = dataInputStream.readLong();
@@ -66,5 +65,14 @@ public class CollectionStatistics {
     public static void setNumberOfToken(int length) { numberOfTokens = length; }
 
     public static int getNumberOfTokens() { return numberOfTokens; }
+
+    // used for testing purpose only
+    static void reset(){
+        collectionSize = 0;
+        lexiconSize = 0;
+        documentsLen = 0;
+        lengthLongestTerm = 0;
+        numberOfTokens = 0;
+    }
 
 }

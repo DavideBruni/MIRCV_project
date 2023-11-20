@@ -1,7 +1,10 @@
 package unipi.aide.mircv.model;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import unipi.aide.mircv.configuration.Configuration;
+
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -10,19 +13,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SkipPointerTest {
 
-    private static final String TEST_SKIP_POINTERS_PATH = "data/skip_pointers.dat";
+    @BeforeAll
+    static void setTestRootPath(){
+        Configuration.setUpPaths("data/test");
+    }
 
     @BeforeEach
     void setUp() {
         // Clean up before each test
-        File file = new File(TEST_SKIP_POINTERS_PATH);
+        File file = new File(Configuration.getSkipPointersPath());
         if (file.exists()) {
             file.delete();
         }
     }
 
     @Test
-    void testWriteSkipPointers() {
+    void testWriteAndReadSkipPointers() {
         // Create some test skip pointers
         List<SkipPointer> skippingPointers = new ArrayList<>();
         skippingPointers.add(new SkipPointer(100, 50, 25, 10));
@@ -41,7 +47,7 @@ class SkipPointerTest {
         assertEquals(0, lexiconEntry.getSkipPointerOffset());
 
         // Read skip pointers from file and verify
-        List<SkipPointer> readSkipPointers = readSkipPointersFromFile(TEST_SKIP_POINTERS_PATH);
+        List<SkipPointer> readSkipPointers = readSkipPointersFromFile(Configuration.getSkipPointersPath());
 
         // Check if the read skip pointers match the original ones
         assertEquals(skippingPointers.size(), readSkipPointers.size());
@@ -57,16 +63,14 @@ class SkipPointerTest {
 
     private List<SkipPointer> readSkipPointersFromFile(String filePath) {
         List<SkipPointer> skipPointers = new ArrayList<>();
-        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(filePath))) {
-            while (dataInputStream.available() > 0) {
-                long maxDocId = dataInputStream.readLong();
-                int docIdsOffset = dataInputStream.readInt();
-                int frequencyOffset = dataInputStream.readInt();
-                int numDocId = dataInputStream.readInt();
-                skipPointers.add(new SkipPointer(maxDocId, docIdsOffset, frequencyOffset, numDocId));
+        int i = 0;
+        while(true){
+            try {
+                skipPointers.add(SkipPointer.readFromDisk(0, i));
+                i++;
+            } catch (IOException e) {
+                break;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
         return skipPointers;
     }

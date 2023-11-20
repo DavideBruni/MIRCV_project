@@ -2,6 +2,7 @@ package unipi.aide.mircv.model;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
@@ -32,14 +33,14 @@ public class EliasFano {
 
         }
         // high bits: Unary code
-        highbits = UnaryCompressor.compress(clusters,sizeHighBits);
+        highbits = UnaryCompressor.compress(clusters);
 
 
         return new EliasFanoCompressedList(highbits,lowbits,l);
 
     }
 
-    public static List<Long> decompress(FileInputStream docStream, long docIdOffset) throws IOException {
+    public static List<Long> decompress(InputStream docStream, long docIdOffset) throws IOException {
         List<Long> docIds = new ArrayList<>();
         byte[] integer_buffer = new byte[4];
         docStream.skipNBytes(docIdOffset);

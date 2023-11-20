@@ -1,67 +1,138 @@
 package unipi.aide.mircv.model;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import unipi.aide.mircv.exceptions.PartialLexiconNotFoundException;
+import unipi.aide.mircv.exceptions.UnableToWriteLexiconException;
+
+import java.io.*;
+import java.nio.file.Files;
+
 import static org.junit.jupiter.api.Assertions.*;
 
-    public class LexiconTest {
+class LexiconTest {
 
-        @Test
-        public void testReadWriteLexicon() {
-            Lexicon lexicon = new Lexicon();
+    private Lexicon lexicon;
 
-            // Aggiungi alcune voci al lessico
-            lexicon.add("apple");
-            lexicon.add("banana");
-            lexicon.add("cherry");
-
-            // Scrivi il lessico su disco
-            lexicon.writeToDisk(true);
-
-            // Leggi il lessico da disco
-            Lexicon readLexicon = Lexicon.readFromDisk(-1);
-
-            // Verifica che le voci siano state correttamente scritte e lette
-            assertTrue(readLexicon.contains("apple"));
-            assertTrue(readLexicon.contains("banana"));
-            assertTrue(readLexicon.contains("cherry"));
-
-            // Verifica che le voci abbiano valori corretti
-            LexiconEntry appleEntry = readLexicon.getEntry("apple");
-            assertNotNull(appleEntry);
-            assertEquals(1, appleEntry.getDf());
-
-        }
-
-        @Test
-        public void testAddAndGetEntryAtPointer() {
-            Lexicon lexicon = new Lexicon();
-
-            // Aggiungi alcune voci al lessico utilizzando il metodo 'add'
-            LexiconEntry appleEntry = new LexiconEntry();
-            LexiconEntry bananaEntry = new LexiconEntry();
-            LexiconEntry cherryEntry = new LexiconEntry();
-            lexicon.add("apple", appleEntry);
-            lexicon.add("banana", bananaEntry);
-            lexicon.add("cherry", cherryEntry);
-
-            // Verifica che le voci siano state correttamente aggiunte
-            assertTrue(lexicon.contains("apple"));
-            assertTrue(lexicon.contains("banana"));
-            assertTrue(lexicon.contains("cherry"));
-
-            // Verifica che i riferimenti alle voci siano corretti
-            assertSame(appleEntry, lexicon.getEntry("apple"));
-            assertSame(bananaEntry, lexicon.getEntry("banana"));
-            assertSame(cherryEntry, lexicon.getEntry("cherry"));
-
-            // Test per il metodo 'getEntryAtPointer'
-            assertEquals("apple", lexicon.getEntryAtPointer(0));
-            assertEquals("banana", lexicon.getEntryAtPointer(1));
-            assertEquals("cherry", lexicon.getEntryAtPointer(2));
-
-            // Test per il comportamento quando il puntatore è fuori dai limiti
-            assertNull(lexicon.getEntryAtPointer(3));
-        }
+    @BeforeEach
+    void setUp() {
+        lexicon = Lexicon.getInstance();
+        lexicon.clear(); // Ensure a clean state before each test
     }
 
 
+
+    @Test
+    void testGetTokens() throws PartialLexiconNotFoundException {
+        // Prepare test data
+        String[] tokens = new String[]{"token1", null, "token3"};
+        DataInputStream[] partialLexiconStreams = new DataInputStream[]{
+                createDataInputStream("token1"),
+                null,
+                createDataInputStream("token3")
+        };
+
+        // Call the getTokens method
+        String[] updatedTokens = Lexicon.getTokens(tokens, partialLexiconStreams);
+
+        // Assertions
+        assertAll(
+                () -> assertEquals("token1", updatedTokens[0]),
+                () -> assertNull(updatedTokens[1]),
+                () -> assertEquals("token3", updatedTokens[2])
+        );
+    }
+
+    @Test
+    void testClear() {
+        // Add some entries to the lexicon
+        lexicon.add("token1");
+        lexicon.add("token2");
+
+        // Call the clear method
+        lexicon.clear();
+
+        // Assertions
+        assertEquals(0, lexicon.numberOfEntries());
+        assertFalse(lexicon.contains("token1"));
+        assertFalse(lexicon.contains("token2"));
+    }
+
+    @Test
+    void testAdd() {
+        // Add a token to the lexicon
+        lexicon.add("testToken");
+
+        // Assertions
+        assertTrue(lexicon.contains("testToken"));
+        assertEquals(1, lexicon.numberOfEntries());
+    }
+
+    // Helper method to create a DataInputStream for testing
+    private DataInputStream createDataInputStream(String token) {
+        byte[] tokenBytes = token.getBytes();
+        return new DataInputStream(new ByteArrayInputStream(tokenBytes));
+    }
+
+
+
+    @Test
+    void testWriteAndGetEntry() throws UnableToWriteLexiconException, IOException {
+        // Prepare test data
+        String[] tokens = {"testToken","tokenTest","Gatto","Cane","Mammifero"};
+        LexiconEntry lexiconEntry = new LexiconEntry();
+
+        for(String token : tokens)
+            lexicon.add(token, lexiconEntry);
+
+
+
+        // Call the writeToDisk method
+        Lexicon.writeToDisk(false);
+
+        for(String token : tokens)
+            assertNotNull(Lexicon.getEntry(token));
+    }
+
+
+    @Test
+    void testReadEntry() {
+        // Prepare test data
+        LexiconEntry lexiconEntry = new LexiconEntry(10, 2.5, 20, 30, 5, 100);
+        byte[] entryBytes = createByteArrayFromLexiconEntry(lexiconEntry);
+
+        // Create a DataInputStream from the byte array
+        DataInputStream dataInputStream = new DataInputStream(new ByteArrayInputStream(entryBytes));
+
+        // Call the readEntry method
+        LexiconEntry readLexiconEntry = Lexicon.readEntry(dataInputStream);
+
+        // Assertions
+        assertAll(
+                () -> assertNotNull(readLexiconEntry),
+                () -> assertEquals(lexiconEntry.getDf(), readLexiconEntry.getDf()),
+                () -> assertEquals(lexiconEntry.getIdf(), readLexiconEntry.getIdf()),
+                () -> assertEquals(lexiconEntry.getDocIdOffset(), readLexiconEntry.getDocIdOffset()),
+                () -> assertEquals(lexiconEntry.getFrequencyOffset(), readLexiconEntry.getFrequencyOffset()),
+                () -> assertEquals(lexiconEntry.getNumBlocks(), readLexiconEntry.getNumBlocks()),
+                () -> assertEquals(lexiconEntry.getSkipPointerOffset(), readLexiconEntry.getSkipPointerOffset())
+        );
+    }
+
+    // Helper method to create a byte array from a LexiconEntry
+    private byte[] createByteArrayFromLexiconEntry(LexiconEntry lexiconEntry) {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+        try (DataOutputStream dataOutputStream = new DataOutputStream(byteArrayOutputStream)) {
+            dataOutputStream.writeInt(lexiconEntry.getDf());
+            dataOutputStream.writeDouble(lexiconEntry.getIdf());
+            dataOutputStream.writeInt(lexiconEntry.getDocIdOffset());
+            dataOutputStream.writeInt(lexiconEntry.getFrequencyOffset());
+            dataOutputStream.writeInt(lexiconEntry.getNumBlocks());
+            dataOutputStream.writeInt(lexiconEntry.getSkipPointerOffset());
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return byteArrayOutputStream.toByteArray();
+    }
+
+}

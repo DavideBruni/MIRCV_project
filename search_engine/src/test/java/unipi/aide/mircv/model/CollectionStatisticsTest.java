@@ -1,10 +1,26 @@
 package unipi.aide.mircv.model;
 
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.exceptions.MissingCollectionStatisticException;
+
 import java.io.File;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CollectionStatisticsTest {
+
+    @BeforeAll
+    static void setTestRootPath(){
+        Configuration.setUpPaths("data/test");
+    }
+
+    @BeforeEach
+    void setUp() {
+        // Reset the state before each test
+        CollectionStatistics.reset(); // Add a method to reset or reinitialize the state
+    }
 
     @Test
     void testWriteAndReadFromDisk() {
@@ -18,7 +34,11 @@ class CollectionStatisticsTest {
         CollectionStatistics.updateDocumentsLen(0);
 
         // Read from disk
-        CollectionStatistics.readFromDisk();
+        try {
+            CollectionStatistics.readFromDisk();
+        } catch (MissingCollectionStatisticException e) {
+            throw new RuntimeException(e);
+        }
 
         // Check if the values were restored correctly
         assertEquals(1, CollectionStatistics.getCollectionSize());
@@ -41,7 +61,11 @@ class CollectionStatisticsTest {
         CollectionStatistics.updateDocumentsLen(200);
 
         // Read from disk
-        CollectionStatistics.readFromDisk();
+        try {
+            CollectionStatistics.readFromDisk();
+        } catch (MissingCollectionStatisticException e) {
+            throw new RuntimeException(e);
+        }
 
         // Check if the values were restored correctly
         assertEquals(1, CollectionStatistics.getCollectionSize());
@@ -52,13 +76,12 @@ class CollectionStatisticsTest {
     @Test
     void testReadWriteEmptyFile() {
         // Ensure the file is empty before reading
-        File file = new File("data/invertedIndex/collectionStatistics.dat");
+        File file = new File(Configuration.getCollectionStatisticsPath());
         if (file.exists()) {
             file.delete();
         }
 
-        // Read from disk (should not throw an exception even if the file is empty)
-        CollectionStatistics.readFromDisk();
+        assertThrows(MissingCollectionStatisticException.class,() -> CollectionStatistics.readFromDisk());
 
         // Check if the values are initialized to default (0)
         assertEquals(0, CollectionStatistics.getCollectionSize());

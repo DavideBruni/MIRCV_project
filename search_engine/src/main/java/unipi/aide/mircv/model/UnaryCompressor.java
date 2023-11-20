@@ -3,16 +3,17 @@ package unipi.aide.mircv.model;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
 public class UnaryCompressor {
 
-    public static List<BitSet> compress(int[] clusters, int numBits) {
+    public static List<BitSet> compress(int[] clusters) {
         List<BitSet> res = new ArrayList<>();
         for(int i = 0; i<clusters.length; i++){        // since 0 must be represente as 0, I have to n bit
-            BitSet tmp = new BitSet(numBits);
+            BitSet tmp = new BitSet(i+1);
             try {
                 tmp.set(1, clusters[i]+1);          //the L.S.b. must be 0
             }catch(IndexOutOfBoundsException ex){
@@ -48,7 +49,7 @@ public class UnaryCompressor {
         return offset;
     }
 
-    public static int readNumber(FileInputStream docStream) throws IOException {
+    public static int readNumber(InputStream docStream) throws IOException {
         int number = 0;
         while(true){
             byte[] buffer = docStream.readNBytes(1);

@@ -180,8 +180,8 @@ public class PostingList {
     // and errors are not handled inside the method
     private List<Posting> readFromDisk(int docIdOffset, int frequencyOffset) throws IOException {
         List<Posting> res = new ArrayList<>();
-        try (FileInputStream docStream = new FileInputStream(Configuration.DOCUMENT_IDS_PATH);
-             FileInputStream freqStream = new FileInputStream(Configuration.FREQUENCY_PATH)){
+        try (FileInputStream docStream = new FileInputStream(Configuration.getDocumentIdsPath());
+             FileInputStream freqStream = new FileInputStream(Configuration.getFrequencyPath())){
             if (!Configuration.isCOMPRESSED()) {
                 DataInputStream dis_docStream = new DataInputStream(docStream);
                 DataInputStream dis_freqStream = new DataInputStream(freqStream);

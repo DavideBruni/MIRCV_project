@@ -1,6 +1,6 @@
 package unipi.aide.mircv.log;
 
-import unipi.aide.mircv.helpers.FileHelper;
+import unipi.aide.mircv.helpers.StreamHelper;
 
 import java.io.IOException;
 import java.util.logging.*;
@@ -38,7 +38,7 @@ public class CustomLogger{
     public static void configureFileLogger(String logFilePath) {
         if (logFilePath != null) {
             try {
-                FileHelper.createDir(logFilePath);
+                StreamHelper.createDir(logFilePath);
                 // Creation of log handler for the specify dir
                 FileHandler fileHandler = new FileHandler(logFilePath, true);
                 fileHandler.setLevel(Level.ALL);

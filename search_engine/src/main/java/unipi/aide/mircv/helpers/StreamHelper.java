@@ -1,5 +1,6 @@
 package unipi.aide.mircv.helpers;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
@@ -16,5 +17,14 @@ public class StreamHelper {
             fos.write(0);
         }
         fos.write(integer);
+    }
+
+    public static void createDir(String Path){
+        File directory = new File(Path);
+        if (!directory.exists()) {
+            if (!directory.mkdirs()) {
+                throw new RuntimeException("Not able to create the directory: " + Path);
+            }
+        }
     }
 }

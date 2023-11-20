@@ -121,8 +121,8 @@ public class InvertedIndex {
             closeStreams(partialLexiconStreams);
             return;
         }
-        try (FileOutputStream docStream = new FileOutputStream(Configuration.DOCUMENT_IDS_PATH);
-             FileOutputStream freqStream = new FileOutputStream(Configuration.FREQUENCY_PATH)){
+        try (FileOutputStream docStream = new FileOutputStream(Configuration.getDocumentIdsPath());
+             FileOutputStream freqStream = new FileOutputStream(Configuration.getFrequencyPath())){
             int offset = 0;
             int[] compressed_offset = new int[]{0,0};
             while(true) {
@@ -268,7 +268,7 @@ public class InvertedIndex {
             Merge();
             CollectionStatistics.writeToDisk();
         }
-        removeAllTemporaryDir(Configuration.ROOT_DIRECTORY);
+        removeAllTemporaryDir(Configuration.getRootDirectory());
     }
 
 

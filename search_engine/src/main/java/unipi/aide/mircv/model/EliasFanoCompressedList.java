@@ -57,6 +57,10 @@ public class EliasFanoCompressedList {
                 if (lowBits_len == 0)
                     continue;
             }
+            if(lowBits.length == 0){
+                lowBits = new byte[1];
+                Arrays.fill(lowBits, (byte) 0);;
+            }
             stream.write(lowBits,0,lowBits.length);
         }
     }
@@ -64,6 +68,5 @@ public class EliasFanoCompressedList {
     public int getSize() {
         return highBitsAsByteArray.size() + lowbits.size() + 8;     //vengono scritti due interi non compressi per ogni postingList
     }
-
 
 }

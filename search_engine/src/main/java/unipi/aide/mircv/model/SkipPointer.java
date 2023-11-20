@@ -1,6 +1,7 @@
 package unipi.aide.mircv.model;
 
-import unipi.aide.mircv.exceptions.DocIdNotFoundException;
+import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.helpers.StreamHelper;
 
 import java.io.*;
 import java.util.List;
@@ -11,7 +12,6 @@ public class SkipPointer {
     private int frequencyOffset;
     private int numDocId;
     private static final int SKIP_POINTER_DIMENSION = 8 + 4 + 4 + 4;
-    private static final String SKIP_POINTERS_PATH = "data/skip_pointers.dat";
     private static int BYTE_WRITTEN = 0;
 
     public SkipPointer(long docid, int docIdsOffset, int frequencyOffset, int numDocId) {
@@ -26,7 +26,11 @@ public class SkipPointer {
     }
 
     public static int write(List<SkipPointer> skippingPointers, LexiconEntry lexiconEntry) {
-        try(DataOutputStream docStream = new DataOutputStream(new FileOutputStream(SKIP_POINTERS_PATH, true))){
+        String filePath = Configuration.getFrequencyPath();
+        StreamHelper.createDir(filePath);
+
+        filePath = filePath + "/skip_pointers.dat";
+        try(DataOutputStream docStream = new DataOutputStream(new FileOutputStream(filePath, true))){
             lexiconEntry.setSkipPointerOffset(BYTE_WRITTEN);
             for(SkipPointer skipPointer : skippingPointers){
                 docStream.writeLong(skipPointer.maxDocId);
@@ -42,10 +46,15 @@ public class SkipPointer {
         return skippingPointers.size();
     }
 
+
     public static SkipPointer readFromDisk(int skipPointerOffset, int numBlockRead) throws IOException {
-        DataInputStream docStream = new DataInputStream(new FileInputStream(SKIP_POINTERS_PATH));
-        docStream.skipBytes(skipPointerOffset + numBlockRead* SKIP_POINTER_DIMENSION);
-        return new SkipPointer(docStream.readLong(),docStream.readInt(),docStream.readInt(),docStream.readInt());
+        String filePath = Configuration.getSkipPointersPath();
+        filePath = filePath + "/skip_pointers.dat";
+        DataInputStream docStream = new DataInputStream(new FileInputStream(filePath));
+        docStream.skipBytes(skipPointerOffset + numBlockRead*SKIP_POINTER_DIMENSION);
+        SkipPointer tmp =  new SkipPointer(docStream.readLong(),docStream.readInt(),docStream.readInt(),docStream.readInt());
+        docStream.close();
+        return tmp;
     }
 
     public void setDocIdOffset(int i) {

@@ -1,7 +1,7 @@
 package unipi.aide.mircv.model;
 
 import unipi.aide.mircv.exceptions.PostingListStoreException;
-import unipi.aide.mircv.helpers.FileHelper;
+import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 
 import java.io.*;
@@ -74,8 +74,8 @@ public class PostingLists {
      */
     public void writeToDisk(boolean compressed) throws PostingListStoreException {
         // creates the directories if needed
-        FileHelper.createDir(TEMP_DOC_ID_DIR);
-        FileHelper.createDir(TEMP_FREQ_DIR);
+        StreamHelper.createDir(TEMP_DOC_ID_DIR);
+        StreamHelper.createDir(TEMP_FREQ_DIR);
 
         try (FileOutputStream docStream = new FileOutputStream(TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat");
              FileOutputStream freqStream = new FileOutputStream(TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat")){

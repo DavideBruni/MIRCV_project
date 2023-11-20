@@ -3,7 +3,7 @@ package unipi.aide.mircv.model;
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.PartialLexiconNotFoundException;
 import unipi.aide.mircv.exceptions.UnableToWriteLexiconException;
-import unipi.aide.mircv.helpers.FileHelper;
+import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 
 import java.io.*;
@@ -107,6 +107,7 @@ public class Lexicon {
             lexiconEntry.setDocIdOffset(partialLexiconStream.readInt());
             lexiconEntry.setFrequencyOffset(partialLexiconStream.readInt());
             lexiconEntry.setNumBlocks(partialLexiconStream.readInt());
+            lexiconEntry.setSkipPointerOffset(partialLexiconStream.readInt());
         } catch (EOFException eof){
             lexiconEntry = null;
         } catch (IOException e) {
@@ -166,7 +167,7 @@ public class Lexicon {
         long high = CollectionStatistics.getNumberOfTokens();
         long mid;
 
-        try(RandomAccessFile file = new RandomAccessFile(Configuration.LEXICON_PATH, "r")){
+        try(RandomAccessFile file = new RandomAccessFile(Configuration.getLexiconPath(), "r")){
             while (low <= high) {
                 mid = (low + high) >>> 1;
 
@@ -243,9 +244,9 @@ public class Lexicon {
     public static void writeToDisk(boolean is_merged) throws UnableToWriteLexiconException {
         String filename;
         if(is_merged) {
-            filename = Configuration.LEXICON_PATH;
+            filename = Configuration.getLexiconPath();
         }else {
-            FileHelper.createDir(TEMP_DIR);
+            StreamHelper.createDir(TEMP_DIR);
             filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
@@ -289,55 +290,12 @@ public class Lexicon {
     }
 
 
-    // TODO used only for test
-    static Lexicon readFromDisk(int partition) {
-        int i = 0;
-        String filename;
-        if(partition == -1) {
-            filename = Configuration.LEXICON_PATH;
-        }else {
-            filename = TEMP_DIR + "/part" + i + ".dat";
-        }
-        try (DataInputStream dataInputStream = new DataInputStream(new FileInputStream(filename))) {
-            Map<String, LexiconEntry> lexicon = new TreeMap<>();
-            while (true) {
-                try{
-                    String key = dataInputStream.readUTF();
-                    LexiconEntry tmp = new LexiconEntry();
-                    tmp.setDf(dataInputStream.readInt());
-                    tmp.setIdf(dataInputStream.readDouble());
-                    tmp.setDocIdOffset(dataInputStream.readInt());
-                    tmp.setFrequencyOffset(dataInputStream.readInt());
-                    tmp.setNumBlocks(dataInputStream.readInt());
-                    tmp.setSkipPointerOffset(dataInputStream.readInt());
-                    lexicon.put(key,tmp);
-
-                }catch (EOFException eof){
-                    break;
-                }
-            }
-            return new Lexicon(lexicon);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     public static void clear() {
         instance.entries = new TreeMap<>();
     }
 
     public void add(String token, LexiconEntry lexiconEntry) {
         entries.put(token, lexiconEntry);       //used in mergedLexicon
-    }
-
-    public String getEntryAtPointer(int pointer) {
-        try{
-            Set<String> keys = entries.keySet();
-            List<String> keyList = new ArrayList<>(keys);
-            return keyList.get(pointer);
-        }catch (IndexOutOfBoundsException e) {
-            return null;
-        }
     }
 
 
