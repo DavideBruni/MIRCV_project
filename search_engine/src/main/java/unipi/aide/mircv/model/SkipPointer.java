@@ -7,14 +7,14 @@ import java.io.*;
 import java.util.List;
 
 public class SkipPointer {
-    private long maxDocId;
+    private int maxDocId;
     private int docIdsOffset;
     private int frequencyOffset;
     private int numDocId;
-    private static final int SKIP_POINTER_DIMENSION = 8 + 4 + 4 + 4;
+    private static final int SKIP_POINTER_DIMENSION = 4 + 4 + 4 + 4;
     private static int BYTE_WRITTEN = 0;
 
-    public SkipPointer(long docid, int docIdsOffset, int frequencyOffset, int numDocId) {
+    public SkipPointer(int docid, int docIdsOffset, int frequencyOffset, int numDocId) {
         maxDocId = docid;
         this.docIdsOffset = docIdsOffset;
         this.frequencyOffset = frequencyOffset;
@@ -26,14 +26,14 @@ public class SkipPointer {
     }
 
     public static int write(List<SkipPointer> skippingPointers, LexiconEntry lexiconEntry) {
-        String filePath = Configuration.getFrequencyPath();
+        String filePath = Configuration.getSkipPointersPath();
         StreamHelper.createDir(filePath);
 
         filePath = filePath + "/skip_pointers.dat";
         try(DataOutputStream docStream = new DataOutputStream(new FileOutputStream(filePath, true))){
             lexiconEntry.setSkipPointerOffset(BYTE_WRITTEN);
             for(SkipPointer skipPointer : skippingPointers){
-                docStream.writeLong(skipPointer.maxDocId);
+                docStream.writeInt(skipPointer.maxDocId);
                 docStream.writeInt(skipPointer.docIdsOffset);
                 docStream.writeInt(skipPointer.frequencyOffset);
                 docStream.writeInt(skipPointer.numDocId);
@@ -52,7 +52,7 @@ public class SkipPointer {
         filePath = filePath + "/skip_pointers.dat";
         DataInputStream docStream = new DataInputStream(new FileInputStream(filePath));
         docStream.skipBytes(skipPointerOffset + numBlockRead*SKIP_POINTER_DIMENSION);
-        SkipPointer tmp =  new SkipPointer(docStream.readLong(),docStream.readInt(),docStream.readInt(),docStream.readInt());
+        SkipPointer tmp =  new SkipPointer(docStream.readInt(),docStream.readInt(),docStream.readInt(),docStream.readInt());
         docStream.close();
         return tmp;
     }
@@ -67,7 +67,7 @@ public class SkipPointer {
         numDocId = size;
     }
 
-    public long getMaxDocId() {
+    public int getMaxDocId() {
         return maxDocId;
     }
 
@@ -83,7 +83,7 @@ public class SkipPointer {
         return numDocId;
     }
 
-    public void setMaxDocId(long docid) {
+    public void setMaxDocId(int docid) {
         maxDocId = docid;
     }
 }

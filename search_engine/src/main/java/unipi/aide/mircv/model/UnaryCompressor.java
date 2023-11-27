@@ -53,11 +53,11 @@ public class UnaryCompressor {
         int number = 0;
         while(true){
             byte[] buffer = docStream.readNBytes(1);
-            int bitsSet = Integer.bitCount(buffer[0] & 0xFF);
+            int bitsSet = Integer.bitCount(buffer[0]);
             if (bitsSet == 0)
                 return number;
             number +=bitsSet;
-            if(bitsSet < 8)
+            if(buffer[0] % 2 == 0)        // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
                 return number;
         }
     }

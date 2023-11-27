@@ -1,7 +1,9 @@
 package unipi.aide.mircv.queryProcessor;
 
 import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.exceptions.MissingCollectionStatisticException;
 import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.model.CollectionStatistics;
 import unipi.aide.mircv.model.Lexicon;
 import unipi.aide.mircv.model.PostingList;
 import unipi.aide.mircv.parsing.Parser;
@@ -24,14 +26,24 @@ public class QueryProcessorMain {
         Configuration.setMinheapDimension(Integer.parseInt(args[2]));
         Scanner scanner = new Scanner(System.in);
 
+        try {
+            CollectionStatistics.readFromDisk();
+        } catch (MissingCollectionStatisticException e) {
+            CustomLogger.error("Error in setting up environment");
+        }
+
+        System.out.println("To perform conjuctive query, start it with \"+\" character\n");
+
         while(true){
+            boolean is_cunjuctive = false;
             System.out.println("Insert new query\n");
             // Read query from stdin
             String query = scanner.nextLine();
             //exit condition    CTRL+E
             if(query.equals("\u0005"))
                 break;
-
+            if( query.trim().charAt(0) == '+' )
+                is_cunjuctive=true;
             long timestamp_start = System.currentTimeMillis();
             List<String> parsedQuery = Parser.getTokens(query,parse);
 
@@ -42,7 +54,7 @@ public class QueryProcessorMain {
                 Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
                         Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
                 Arrays.sort(postingLists, termUpperBoundComparator);
-                queryResult = Scorer.maxScore(postingLists);
+                queryResult = Scorer.maxScore(postingLists, is_cunjuctive);
             }
 
             // printing result

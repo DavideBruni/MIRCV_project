@@ -1,19 +1,27 @@
 package unipi.aide.mircv.model;
 
 public  class Posting{
-    long docid;
+    int docid;
     int frequency;
 
-    public Posting(long docid, int frequency) {
+    public Posting(int docid, int frequency) {
         this.docid = docid;
         this.frequency = frequency;
     }
 
-    public long getDocid() {
+    public int getDocid() {
         return docid;
     }
 
     public int getFrequency() {
         return frequency;
+    }
+
+    @Override
+    public String toString() {
+        return "Posting{" +
+                "docid=" + docid +
+                ", frequency=" + frequency +
+                '}';
     }
 }

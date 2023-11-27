@@ -14,8 +14,8 @@ class DocumentIndexTest {
         Configuration.setUpPaths("data/test");
     }
     @Test
-    void testAddAndRetrieveDocument() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
-        long docid = 1;
+    void testAddAndRetrieveDocumentOneInsert() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
+        int docid = 1;
         String docno = "1";
         int docLen = 500;
 
@@ -32,6 +32,29 @@ class DocumentIndexTest {
     }
 
     @Test
+    void testAddAndRetrieveDocumentMultipleInsert() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
+        int [] docid = {1,2,3,4,5};
+        String [] docno = {"1","2","3","4","5"};
+        int docLen = 500;
+
+        for(int i = 0; i<docid.length; i++) {
+            // Add a document to the index
+            DocumentIndex.add(docid[i], docno[i], docLen);
+        }
+
+
+
+        for(int i = 0; i<docid.length; i++) {
+            // Retrieve the document
+            DocumentInfo retrievedDoc = DocumentIndex.retrieve(docno[i]);
+            // Check if the retrieved document matches the added document
+            assertEquals(docid[i], retrievedDoc.getDocid());
+            assertEquals(docno[i], retrievedDoc.getPid());
+            assertEquals(docLen, retrievedDoc.getDocLen());
+        }
+    }
+
+    @Test
     void testRetrieveNonExistingDocument() {
         String nonExistingDocno = "nonExistingDoc";
 
@@ -41,7 +64,7 @@ class DocumentIndexTest {
 
     @Test
     void testGetDocumentLength() throws UnableToAddDocumentIndexException, DocumentNotFoundException {
-        long docid = 456;
+        int docid = 456;
         String docno = "456";
         int docLen = 700;
 
@@ -57,7 +80,7 @@ class DocumentIndexTest {
 
     @Test
     void testGetDocumentLengthForNonExistingDocument() {
-        long nonExistingDocid = 789;
+        int nonExistingDocid = 789;
 
         // Attempt to get the length of a non-existing document should throw DocumentNotFoundException
         assertThrows(DocumentNotFoundException.class, () -> DocumentIndex.getDocumentLength(nonExistingDocid));

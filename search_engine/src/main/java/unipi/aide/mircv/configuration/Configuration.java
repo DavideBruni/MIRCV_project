@@ -9,8 +9,8 @@ public class Configuration {
     private static String FREQUENCY_PATH = ROOT_DIRECTORY+"/invertedIndex/frequencies.dat";
     private static String LEXICON_PATH = ROOT_DIRECTORY+"/invertedIndex/lexicon.dat";
     private static String COLLECTION_STATISTICS_PATH = ROOT_DIRECTORY+"/invertedIndex/collectionStatistics.dat";
-    private static String SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/skipPointers.dat";
-    private static String DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/documentIndex.dat";
+    private static String SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/";
+    private static String DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/";
 
 
     public static boolean isCOMPRESSED() {
@@ -19,6 +19,11 @@ public class Configuration {
 
     public static void setCOMPRESSED(boolean COMPRESSED) {
         Configuration.COMPRESSED = COMPRESSED;
+        if(COMPRESSED){
+            setUpPaths("data/compressed");
+        }else{
+            setUpPaths("data");
+        }
     }
 
     public static void setMinheapDimension(int minheapDimension) {
@@ -33,10 +38,10 @@ public class Configuration {
         ROOT_DIRECTORY = rootPaths;
         DOCUMENT_IDS_PATH = ROOT_DIRECTORY+"/invertedIndex/document_ids.dat";
         FREQUENCY_PATH = ROOT_DIRECTORY+"/invertedIndex/frequencies.dat";
-        LEXICON_PATH = ROOT_DIRECTORY+"invertedIndex/lexicon.dat";
+        LEXICON_PATH = ROOT_DIRECTORY+"/invertedIndex/lexicon.dat";
         COLLECTION_STATISTICS_PATH = ROOT_DIRECTORY+"/invertedIndex/collectionStatistics.dat";
         SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/skipPointers.dat";
-        DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/documentIndex.dat";
+        DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/";
     }
 
     public static String getDocumentIdsPath() {

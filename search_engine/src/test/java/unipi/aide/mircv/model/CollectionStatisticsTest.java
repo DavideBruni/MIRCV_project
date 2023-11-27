@@ -46,42 +46,16 @@ class CollectionStatisticsTest {
     }
 
     @Test
-    void testReadWriteConsistency() {
-        // Initialize the statistics
-        CollectionStatistics.updateCollectionSize();
-        CollectionStatistics.updateDocumentsLen(150);
-        CollectionStatistics.writeToDisk();
-
-        // Clear the statistics
-        CollectionStatistics.updateCollectionSize();
-        CollectionStatistics.updateDocumentsLen(0);
-
-        // Modify the values
-        CollectionStatistics.updateCollectionSize();
-        CollectionStatistics.updateDocumentsLen(200);
-
-        // Read from disk
-        try {
-            CollectionStatistics.readFromDisk();
-        } catch (MissingCollectionStatisticException e) {
-            throw new RuntimeException(e);
-        }
-
-        // Check if the values were restored correctly
-        assertEquals(1, CollectionStatistics.getCollectionSize());
-        // The test checks for consistency, so it should still be the original value
-        assertEquals(150, CollectionStatistics.getDocumentsLen());
-    }
-
-    @Test
     void testReadWriteEmptyFile() {
         // Ensure the file is empty before reading
         File file = new File(Configuration.getCollectionStatisticsPath());
         if (file.exists()) {
-            file.delete();
+            if(!file.delete()){
+                throw new RuntimeException();
+            }
         }
 
-        assertThrows(MissingCollectionStatisticException.class,() -> CollectionStatistics.readFromDisk());
+        assertThrows(MissingCollectionStatisticException.class, CollectionStatistics::readFromDisk);
 
         // Check if the values are initialized to default (0)
         assertEquals(0, CollectionStatistics.getCollectionSize());

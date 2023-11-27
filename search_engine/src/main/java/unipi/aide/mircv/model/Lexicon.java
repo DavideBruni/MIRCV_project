@@ -13,7 +13,7 @@ import java.util.function.Function;
 
 public class Lexicon {
 
-    private static final String TEMP_DIR ="data/invertedIndex/temp/lexicon";
+    private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
     private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
 
@@ -28,11 +28,6 @@ public class Lexicon {
 
     private Lexicon(){
         entries = new TreeMap<>();
-    }
-
-    // TODO used only for test
-    private Lexicon(Map<String, LexiconEntry> map) {
-        entries = map;
     }
 
 
@@ -83,7 +78,7 @@ public class Lexicon {
         DataInputStream[] dataInputStreams = new DataInputStream[NUM_FILE_WRITTEN];
         for(int i=0; i<NUM_FILE_WRITTEN; i++){
             try {
-                dataInputStreams[i] = new DataInputStream(new FileInputStream(TEMP_DIR + "/part" + i + ".dat"));
+                dataInputStreams[i] = new DataInputStream(new FileInputStream(Configuration.getRootDirectory()+TEMP_DIR + "/part" + i + ".dat"));
             } catch (FileNotFoundException e) {
                 CustomLogger.info("Unable to open stream for partition "+i+": partition lost, moving on");
             }
@@ -107,7 +102,9 @@ public class Lexicon {
             lexiconEntry.setDocIdOffset(partialLexiconStream.readInt());
             lexiconEntry.setFrequencyOffset(partialLexiconStream.readInt());
             lexiconEntry.setNumBlocks(partialLexiconStream.readInt());
+            lexiconEntry.setPostingNumber(partialLexiconStream.readInt());
             lexiconEntry.setSkipPointerOffset(partialLexiconStream.readInt());
+            lexiconEntry.setTermUpperBound(partialLexiconStream.readDouble());
         } catch (EOFException eof){
             lexiconEntry = null;
         } catch (IOException e) {
@@ -148,9 +145,12 @@ public class Lexicon {
      * @see #getEntryFromDisk(String)
      */
     public static LexiconEntry getEntry(String token) {
-        LexiconEntry res = instance.entries.get(token);
+        LexiconEntry res = null;
+        if(instance.entries != null)
+            res = instance.entries.get(token);
         if(res==null){
             res = getEntryFromDisk(token);
+            instance.add(token,res);
         }
         return res;
     }
@@ -162,7 +162,7 @@ public class Lexicon {
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      */
     private static LexiconEntry getEntryFromDisk(String targetToken) {
-        int entrySize = (CollectionStatistics.getLongestTermLength() + 28);
+        int entrySize = (CollectionStatistics.getLongestTermLength() + 40);
         long low = 0;
         long high = CollectionStatistics.getNumberOfTokens();
         long mid;
@@ -182,7 +182,7 @@ public class Lexicon {
 
                 if (compareResult == 0) {       //find the entry
                     return new LexiconEntry(file.readInt(), file.readDouble(), file.readInt(),
-                            file.readInt(), file.readInt(), file.readInt());
+                            file.readInt(), file.readInt(), file.readInt(), file.readInt(), file.readDouble());
                 } else if (compareResult < 0) {     // current entry is lower than target one
                     low = mid + 1;
                 } else {                // current entry is greater than target one
@@ -197,43 +197,38 @@ public class Lexicon {
         return null;
     }
 
-    public void add(String token) {
-        entries.put(token,new LexiconEntry());
-    }
 
-    public void updateDf(String token) {
-        if (instance.contains(token)) {
-            entries.get(token).updateDF();
+    public void updateDfAndNumberOfPosting(String token) {
+        LexiconEntry lexiconEntry= entries.get(token);
+        if(lexiconEntry == null){
+            lexiconEntry = new LexiconEntry();
+            entries.put(token,lexiconEntry);
+        }else {
+            lexiconEntry.updateDF();
         }
+        lexiconEntry.updateNumberOfPostings(1);
     }
 
-    public static void updateDocIdOffset(String token, int offset) {
-        if (instance.contains(token)) {
-            instance.entries.get(token).setDocIdOffset(offset);
+    public static synchronized void updateEntry(String token, int docIdOffset, int frequencyOffset, int numberOfPostings) {
+        try{
+            LexiconEntry lexiconEntry = instance.entries.get(token);
+            lexiconEntry.setDocIdOffset(docIdOffset);
+            lexiconEntry.setFrequencyOffset(frequencyOffset);
+            lexiconEntry.setPostingNumber(numberOfPostings);
+        }catch (Exception e){
+            CustomLogger.error("Missing "+token);
         }
     }
 
     public static void setEntry(String token, LexiconEntry lexiconEntry){
-        if (instance.contains(token)) {
-            instance.entries.put(token, lexiconEntry);
-        }
+        instance.entries.put(token, lexiconEntry);
     }
 
-    public static void setNumberOfPostings(String token, int size) {
-        if (instance.contains(token)) {
-            instance.entries.get(token).setPostingNumber(size);
-        }
-    }
 
     public int numberOfEntries() {
         return instance.entries.entrySet().size();
     }
 
-    public static void updateFrequencyOffset(String token, int offset) {
-        if (instance.contains(token)) {
-            instance.entries.get(token).setFrequencyOffset(offset);
-        }
-    }
 
     /**
      * Writes the lexicon entries to disk, either as a merged lexicon or as individual partition files.
@@ -241,13 +236,13 @@ public class Lexicon {
      * @param is_merged A boolean indicating whether the lexicon is to be written as a merged lexicon.
      */
 
-    public static void writeToDisk(boolean is_merged) throws UnableToWriteLexiconException {
+    public static void writeToDisk(boolean is_merged,boolean debug) throws UnableToWriteLexiconException {
         String filename;
         if(is_merged) {
             filename = Configuration.getLexiconPath();
         }else {
-            StreamHelper.createDir(TEMP_DIR);
-            filename = TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
+            StreamHelper.createDir(Configuration.getRootDirectory()+TEMP_DIR);
+            filename = Configuration.getRootDirectory()+TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
         try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file,true))) {
@@ -262,15 +257,28 @@ public class Lexicon {
                 dataOutputStream.writeInt(tmp.getDocIdOffset());
                 dataOutputStream.writeInt(tmp.getFrequencyOffset());
                 dataOutputStream.writeInt(tmp.getNumBlocks());
+                dataOutputStream.writeInt(tmp.getPostingNumber());
                 dataOutputStream.writeInt(tmp.getSkipPointerOffset());
+                dataOutputStream.writeDouble(tmp.getTermUpperBound());
                 CollectionStatistics.setLongestTerm(key.length());
             }
             if (!is_merged)
                 NUM_FILE_WRITTEN++;
-            else if(instance.entries.keySet().size() > 0)
-                CollectionStatistics.setNumberOfToken(instance.entries.keySet().size());
         } catch (IOException e) {
             throw new UnableToWriteLexiconException(e.getMessage());
+        }
+        if(debug){
+            PrintStream originalOut = System.out;
+            try {
+                PrintStream fileStream = new PrintStream(new FileOutputStream("data/debug/lexicon.txt",true));
+                System.setOut(fileStream);
+                System.out.println(instance);
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                System.setOut(originalOut);
+            }
         }
     }
 
@@ -298,5 +306,12 @@ public class Lexicon {
         entries.put(token, lexiconEntry);       //used in mergedLexicon
     }
 
+
+    @Override
+    public String toString() {
+        return "Lexicon{" +
+                "entries=" + entries +
+                '}';
+    }
 
 }

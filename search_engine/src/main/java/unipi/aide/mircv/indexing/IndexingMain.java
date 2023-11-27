@@ -42,7 +42,7 @@ public class IndexingMain {
                 if (entry.getName().equals(TSV_FILE_NAME)) {        // searching for the file with the name TSV_FILE_NAME
                     // Get the current timestamp in milliseconds
                     long timestamp_start = System.currentTimeMillis();
-                    InvertedIndex.createInvertedIndex(tarIn, parse);
+                    InvertedIndex.createInvertedIndex(tarIn, parse, false);
                     long timestamp_stop = System.currentTimeMillis();
                     CustomLogger.info("Index created in: "+(timestamp_stop-timestamp_start)+" milliseconds");
                     Duration duration = Duration.ofMillis(timestamp_stop-timestamp_start);

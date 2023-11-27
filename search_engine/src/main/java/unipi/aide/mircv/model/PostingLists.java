@@ -1,5 +1,6 @@
 package unipi.aide.mircv.model;
 
+import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.PostingListStoreException;
 import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
@@ -11,12 +12,12 @@ import java.util.stream.Collectors;
 public class PostingLists {
 
     Map<String, PostingList> postings;                  // for each token, we have it's posting list
-    private static final String TEMP_DOC_ID_DIR ="data/invertedIndex/temp/docIds";
-    private static final String TEMP_FREQ_DIR ="data/invertedIndex/temp/frequencies";
+    private static final String TEMP_DOC_ID_DIR = "/invertedIndex/temp/docIds";
+    private static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     private static int NUM_FILE_WRITTEN = 0;       // since partial posting lists are stored in different partition, we need to know how many of them
     private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
 
-    public PostingLists() { this.postings = new HashMap<>(); }
+    public PostingLists() { this.postings = new HashMap<>(1500, 0.75F); }
 
     /**
      * Adds a posting to the inverted index of a given token.
@@ -26,12 +27,16 @@ public class PostingLists {
      * @param token     The token of the posting list.
      * @param frequency The frequency of the token in the document.
      */
-    public void add(long docId, String token, int frequency) {
+    public void add(int docId, String token, int frequency) {
+        Posting posting = new Posting(docId, frequency);
         if (!postings.containsKey(token)){
-            postings.put(token, new PostingList());     // If the specified token is not present in the postings, a new PostingList is created.
+            PostingList postingList = new PostingList(){};
+            postingList.add(posting);
+            postings.put(token,postingList);     // If the specified token is not present in the postings, a new PostingList is created.
+        }else {
+            // add the new Posting to the token posting list
+            postings.get(token).add(posting);
         }
-        // add the new Posting to the token posting list
-        postings.get(token).add(new Posting(docId, frequency));
     }
 
     /**
@@ -46,7 +51,7 @@ public class PostingLists {
             postings_merged.addAll(postingList.postingList);
         }
         // Sort the merged PostingList in ascending order
-        postings_merged.sort(Comparator.comparingLong(Posting::getDocid));
+        postings_merged.sort(Comparator.comparingInt(Posting::getDocid));
         // The resulting PostingList is then associated with the specified token
         postings.put(token, new PostingList(postings_merged,token));
     }
@@ -74,11 +79,11 @@ public class PostingLists {
      */
     public void writeToDisk(boolean compressed) throws PostingListStoreException {
         // creates the directories if needed
-        StreamHelper.createDir(TEMP_DOC_ID_DIR);
-        StreamHelper.createDir(TEMP_FREQ_DIR);
+        StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR);
+        StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_FREQ_DIR);
 
-        try (FileOutputStream docStream = new FileOutputStream(TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat");
-             FileOutputStream freqStream = new FileOutputStream(TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat")){
+        try (FileOutputStream docStream = new FileOutputStream(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat");
+             FileOutputStream freqStream = new FileOutputStream(Configuration.getRootDirectory() + TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat")){
             if (!compressed){
                 try(DataOutputStream docStream_dos = new DataOutputStream(docStream);
                     DataOutputStream freqStream_dos = new DataOutputStream(freqStream)) {
@@ -88,6 +93,7 @@ public class PostingLists {
                 writeToDiskCompressed(docStream, freqStream,0, 0, false);
             }
             NUM_FILE_WRITTEN++;
+
         } catch (IOException e) {
             CustomLogger.error("Error while writing posting lists on disk: abort operation");
             throw new PostingListStoreException();
@@ -112,12 +118,13 @@ public class PostingLists {
         int[] offsets = new int[]{docOffset,freqOffset};
 
         CustomLogger.info("Start writing posting list...");
-        for(String token: postings.keySet()){
+        Set<String> keySet = postings.keySet();
+        for(String token: keySet){
             List<List<Posting>> postingListsToCompress = new ArrayList<>();
             List<Posting> postingLists = postings.get(token).getPostingList();      //get the posting list for a token
 
-            long U = postingLists.get(postingLists.size() - 1).docid;       // greatest long to be stored
-            long n = postingLists.size();                                   // how many posting must be stored
+            int U = postingLists.get(postingLists.size() - 1).docid;       // greatest int to be stored
+            int n = postingLists.size();                                   // how many posting must be stored
 
             // Need Skipping Pointer
             LexiconEntry lexiconEntry = Lexicon.getEntry(token);
@@ -128,20 +135,22 @@ public class PostingLists {
             if(is_merged && ((n*Math.ceil(Math.log(U/(double)n) / Math.log(2.0)) +2*n)/8 > POSTING_SIZE_THRESHOLD)){
                 CustomLogger.info("Initialize skipping pointers");
                 // initialize skipping pointers using heuristically optimal block size
-                int blockSize = (int) Math.round(Math.sqrt(postings.get(token).getPostingList().size()));
+                int blockSize = (int) Math.round(Math.sqrt(n));
                 initializeSkipPointers(blockSize,postingListsToCompress,skipPointers,postingLists);
             }else{
                 // create anyway a list of list in order to use a unique method to write and
                 // compressed posting list both if it's divided in blocks or not
                 postingListsToCompress.add(postingLists);
             }
-                offsets = compressAndWritePostingList(postingListsToCompress,skipPointers,lexiconEntry,docStream,freqStream, docOffset, freqOffset);
+                lexiconEntry.setFrequencyOffset(offsets[1]);        //controllare se serve la lexicon entry
+                lexiconEntry.setDocIdOffset(offsets[0]);
+                offsets = compressAndWritePostingList(postingListsToCompress,skipPointers,docStream,freqStream, offsets[0], offsets[1]);
 
             if(skipPointers.size() > 1) { // check if we have skipping pointers
                 int numBlocks = SkipPointer.write(skipPointers, lexiconEntry);  // write them on disk
                 lexiconEntry.setNumBlocks(numBlocks);           // update lexicon entry
             }
-            Lexicon.setEntry(token,lexiconEntry);
+
 
         }
         CustomLogger.info("...posting list stored");
@@ -153,7 +162,6 @@ public class PostingLists {
      *
      * @param postingListsToCompress A list of list of postings to be compressed and written.
      * @param skipPointers           The list of skip pointers for skip compression. May be empty if no skip pointers are used.
-     * @param lexiconEntry           The lexicon entry associated with the posting lists.
      * @param docStream              The output stream for document IDs.
      * @param freqStream             The output stream for frequencies.
      * @param docOffset              The initial offset for writing document IDs in the output stream.
@@ -161,10 +169,7 @@ public class PostingLists {
      * @return An array of two integers representing the final offsets after writing the compressed data.
      *         The first element is the offset for document IDs, and the second element is the offset for frequencies.
      */
-    private int[] compressAndWritePostingList(List<List<Posting>> postingListsToCompress, List<SkipPointer> skipPointers, LexiconEntry lexiconEntry, FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset) throws IOException {
-        lexiconEntry.setDocIdOffset(docOffset);
-        lexiconEntry.setFrequencyOffset(freqOffset);
-
+    private int[] compressAndWritePostingList(List<List<Posting>> postingListsToCompress, List<SkipPointer> skipPointers, FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset) throws IOException {
         // if posting list is not divided in blocks, this for have a single iteration
         for(List<Posting> postingList : postingListsToCompress){
             CustomLogger.info("Compressing document ids");
@@ -175,8 +180,7 @@ public class PostingLists {
             CustomLogger.info("Writing compressed document ids");
             if(skipPointers.size()>0)
                 skipPointers.get(postingListsToCompress.indexOf(postingList)).setDocIdOffset(docOffset);
-            eliasFanoCompressedDocIdList.writeToDisk(docStream);
-            docOffset = eliasFanoCompressedDocIdList.getSize();
+            docOffset += eliasFanoCompressedDocIdList.writeToDisk(docStream);
 
             CustomLogger.info("Writing compressed term frequencies");
             if(skipPointers.size()>0)
@@ -238,28 +242,22 @@ public class PostingLists {
         CustomLogger.info("Start writing posting list...");
         for(String token: postings.keySet()){
             List<Posting> postingLists = postings.get(token).getPostingList();
-            Lexicon.updateDocIdOffset(token, offset * Long.BYTES);
-            Lexicon.updateFrequencyOffset(token, offset * Integer.BYTES);
             // check posting list dimension (if is the final one) to eventually create skipping-pointers
-            if (is_merged && postingLists.size() * (Long.BYTES + Integer.BYTES) > POSTING_SIZE_THRESHOLD){
+            if (is_merged && postingLists.size() * 8 > POSTING_SIZE_THRESHOLD){
                 CustomLogger.info("Generating skipping pointers");
                 LexiconEntry lexiconEntry = Lexicon.getEntry(token);
                 addSkipPointers(token, lexiconEntry);       // we can create them directly, we have fixed dimension for docIds and frequencies
                 Lexicon.setEntry(token,lexiconEntry);
             }
             for (Posting posting : postingLists) {              //for each posting in postingList
-                docIdStream.writeLong(posting.docid);           // writing docId
+                docIdStream.writeInt(posting.docid);           // writing docId
                 frequencyStream.writeInt(posting.frequency);    // writing frequency
                 offset++;
             }
-            Lexicon.setNumberOfPostings(token,postingLists.size());     //used for retrieve not compressed posting lists from disk
+            Lexicon.updateEntry(token, offset * Integer.BYTES,offset * Integer.BYTES, postingLists.size());
+            //number of posting (postiList.size()) is used for retrieve not compressed posting lists from disk
         }
-        try {
-            docIdStream.close();
-            frequencyStream.close();
-        }catch(IOException e){
-            CustomLogger.error("Error while closing streams");
-        }
+
         CustomLogger.info("...posting list stored");
         return offset;      // is not an offset, but the number of posting lists written
 
@@ -280,7 +278,7 @@ public class PostingLists {
         List<SkipPointer> skippingPointers = new ArrayList<>();
         for(int j = 0; j<token_postings.size();j++){
             if (++i == blockSize || j == token_postings.size() - 1){        // last block could be smaller
-                int docIdsOffset = i * numBlocks * Long.BYTES;
+                int docIdsOffset = i * numBlocks * Integer.BYTES;
                 int frequencyOffset = i * numBlocks * Integer.BYTES;
                 skippingPointers.add(new SkipPointer(token_postings.get(j).docid,docIdsOffset,frequencyOffset,i));
                 i = 0;
@@ -291,5 +289,12 @@ public class PostingLists {
             numBlocks = SkipPointer.write(skippingPointers, lexiconEntry);
 
         lexiconEntry.setNumBlocks(numBlocks);
+    }
+
+    @Override
+    public String toString() {
+        return "PostingLists{" +
+                "postings=" + postings +
+                '}';
     }
 }

@@ -7,7 +7,11 @@ import unipi.aide.mircv.model.*;
 
 import java.io.IOException;
 import java.util.Comparator;
+import java.util.List;
 import java.util.PriorityQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Scorer {
     private static final double NORMALIZATION_PARAMETER_B = 0.70;
@@ -22,46 +26,77 @@ public class Scorer {
      * @param idf    The inverse document frequency of the term.
      * @return The BM25 score for the term in the specified document.
      */
-    public static double BM25_singleTermDocumentScore(int tf, long docId, double idf) throws DocumentNotFoundException,ArithmeticException {
+    public static double BM25_singleTermDocumentScore(int tf, int docId, double idf) throws DocumentNotFoundException,ArithmeticException {
         int documentLength = DocumentIndex.getDocumentLength(docId);
         double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
         return (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
     }
 
-    /**
-     * Calculates the upper bound of BM25 scores for a term in a posting list and set it in provided LexiconEntry.
-     *
-     * @param postingList   The posting list containing the term occurrences.
-     * @param lexiconEntry  The LexiconEntry corresponding to the term.
-     */
-    public static void BM25_termUpperBound(PostingList postingList, LexiconEntry lexiconEntry){
-        double maxScore = 0.0;
-        for(Posting posting : postingList.getPostingList()){
+
+    private static double localMaxScore(List<Posting> postingList, double idf, double averageDocumentLength){
+        double localScore = 0.0;
+
+        for(Posting posting : postingList){
             int tf = posting.getFrequency();
             try {
                 int documentLength = DocumentIndex.getDocumentLength(posting.getDocid());
-                double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
-                double score = (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * lexiconEntry.getIdf();
-                if (score > maxScore)
-                    maxScore = score;
+                double score = (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
+                localScore = Math.max(localScore, score);
             } catch (DocumentNotFoundException e) {
                 CustomLogger.error("Document "+posting.getDocid()+ " not found");
             }
         }
-        lexiconEntry.setTermUpperBound(maxScore);
+        return localScore;
     }
+    static double maxScore = 0;
+    public static void BM25_termUpperBound(PostingList postingList, LexiconEntry lexiconEntry) {
+        CustomLogger.info("Calculating term upper bound for token: "+postingList.getToken());
+        double idf = lexiconEntry.getIdf();
+        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
+
+        List<Posting> postings = postingList.getPostingList();
+        int numThreads = Math.min(20, postings.size() / 100 + 1);
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
+        try {
+            for (int i = 0; i < numThreads; i++) {
+                int startIndex = i * 100;
+                int endIndex = Math.min((i + 1) * 100, postings.size());
+
+                List<Posting> sublist = postings.subList(startIndex, endIndex);
+
+                // submit the task (lambda function) to one executor (one thread)
+                executorService.submit(() -> {
+                    double localMaxScore = localMaxScore(sublist,idf,averageDocumentLength);    // find localMaxScore
+                    synchronized (Scorer.class) {                       // need to avoid inconsistency
+                        maxScore = Math.max(maxScore, localMaxScore);
+                    }
+                });
+            }
+        } finally {
+            executorService.shutdown();
+            try {
+                // wait that all the threads end
+                executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
 
     /**
      * Computes the maximum scores for a set of posting lists using the MAX-SCORE algorithm.
      * The method returns a priority queue containing DocScorePair objects representing
      * the documents with the highest scores.
      *
-     * @param postingLists An array of posting lists.
+     * @param postingLists An array of posting lists sorted by upper bound in ascending order.
+     * @param conjunctiveQuery A boolean indicating whether the query is conjunctive or not.
      * @return A priority queue of DocScorePair objects sorted by descending scores.
      *         The queue contains the documents with the highest scores, limited by the configured minHeapSize.
      */
-    public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists) {
-        PriorityQueue<DocScorePair> q = new PriorityQueue<>(Comparator.comparingDouble(DocScorePair::getScore));
+    public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists, boolean conjunctiveQuery) {
+        PriorityQueue<DocScorePair> q = new PriorityQueue<>();
         int minHeapSize = Configuration.getMinheapDimension();
         double[] upperBounds = new double[postingLists.length];
         upperBounds[0] = postingLists[0].getTermUpperBound();
@@ -72,27 +107,36 @@ public class Scorer {
 
         double theta = 0;
         int pivot = 0;
-        long current = minimumDocid(postingLists);
+        int current = minimumDocid(postingLists);
 
-        while (pivot < postingLists.length && current != Integer.MAX_VALUE) {
+        while (pivot < postingLists.length && current != Long.MAX_VALUE) {
             double score = 0;
-            long next = Long.MAX_VALUE;
+            int next = Integer.MAX_VALUE;
 
             for (int i = pivot; i <postingLists.length; i++) { // Essential lists
-                long minDocIdUsed = postingLists[i].docId();
-                if (minDocIdUsed == current) {
+                if (postingLists[i].docId() == current) {
                     score += postingLists[i].score();
                     try {
                         postingLists[i].next();
                     }catch (IOException e){
                         CustomLogger.error("Error calling next() function: "+e.getMessage());
                     }
+                } else if (conjunctiveQuery) {      // we have a postingList without the doc with minDocIdUsed
+                    current = -1;       // we don't have to consider this document anymore
+                    score = 0;
                 }
-
-                if (postingLists[i].docId() < next) {       // if the current docId is lower than the candidate next, update the candidate next
-                    next = postingLists[i].docId();
+                if(conjunctiveQuery && current!=-1) {
+                    try {
+                        postingLists[i].next();
+                    } catch (IOException e) {
+                        CustomLogger.error("Error calling next() function: " + e.getMessage());
+                    }
                 }
+                    if (postingLists[i].docId() < next) {       // if the current docId is lower than the candidate next, update the candidate next
+                        next = postingLists[i].docId();
+                    }
             }
+
 
             for (int i = pivot - 1; i >= 0; i--) { // Non-essential lists
                 if (score + upperBounds[i] <= theta) {
@@ -103,40 +147,44 @@ public class Scorer {
 
                 if (postingLists[i].docId() == current) {
                     score += postingLists[i].score();
-                }
-
-                if (q.add(new DocScorePair(current, score))) { // List pivot update
-                    if(q.size() > minHeapSize) {
-                        q.poll();
-                    }
-                    if(q.size() == minHeapSize){
-                        if (q.peek() != null) {
-                            theta = q.peek().getScore();
-                        }
-                    }
+                } else if (conjunctiveQuery) {
+                    break;
                 }
             }
 
-            while (pivot < postingLists.length && upperBounds[pivot] <= theta) {
-                pivot++;
+            if (q.add(new DocScorePair(current, score))) { // List pivot update
+                if (q.size() > minHeapSize) {
+                    q.poll();
+                }
+                if (q.size() == minHeapSize) {
+                    if (q.peek() != null) {
+                        theta = q.peek().getScore();
+                    }
+                }
+
+                while (pivot < postingLists.length && upperBounds[pivot] <= theta) {
+                    pivot++;
+                }
             }
             current = next;
         }
 
-        return q;
+        PriorityQueue<DocScorePair> reversedQueue = new PriorityQueue<>(q.size(), Comparator.reverseOrder());
+        reversedQueue.addAll(q);
+        return reversedQueue;
     }
 
-    private static long minimumDocid(PostingList[] postingLists) {
-        long minDocid = Integer.MAX_VALUE;
-        for(int i = 0; i< postingLists.length; i++){
-            if (postingLists[i].docId() < minDocid) {
-                minDocid = postingLists[i].docId();
+    private static int minimumDocid(PostingList[] postingLists) {
+        int minDocid = Integer.MAX_VALUE;
+        for (PostingList postingList : postingLists) {
+            if (postingList.docId() < minDocid) {
+                minDocid = postingList.docId();
             }
         }
         return minDocid;
     }
 
-    static class DocScorePair {
+    static class DocScorePair implements Comparable{
         private long docid;
         private double score;
 
@@ -147,6 +195,22 @@ public class Scorer {
 
         public double getScore() {
             return score;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null || obj.getClass() != this.getClass())
+                return false;
+            DocScorePair docScorePair = (DocScorePair) obj;
+            if(docScorePair.docid == this.docid && docScorePair.score == this.score)
+                return true;
+            return false;
+        }
+
+        @Override
+        public int compareTo(Object o) {
+            DocScorePair tmp = (DocScorePair) o;
+            return Double.compare(this.getScore(),tmp.getScore());
         }
     }
 

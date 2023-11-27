@@ -1,17 +1,17 @@
 package unipi.aide.mircv.model;
 
 public class DocumentInfo {
-    private long docid;
+    private int docid;
     private String pid;
     private int docLen;
 
-    public DocumentInfo(String pid, long docid, int docLen) {
+    public DocumentInfo(String pid, int docid, int docLen) {
         this.docid = docid;
         this.docLen = docLen;
         this.pid = pid;
     }
 
-    public long getDocid() {
+    public int getDocid() {
         return docid;
     }
 
@@ -19,7 +19,7 @@ public class DocumentInfo {
         return docLen;
     }
 
-    public void setDocid(long docid) {
+    public void setDocid(int docid) {
         this.docid = docid;
     }
 

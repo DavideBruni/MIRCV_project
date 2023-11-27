@@ -6,17 +6,14 @@ import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.queryProcessor.Scorer;
 
-import java.io.DataInputStream;
-import java.io.EOFException;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 
 public class PostingList {
 
-    private static final String TEMP_DOC_ID_DIR ="data/invertedIndex/temp/docIds";
-    private static final String TEMP_FREQ_DIR ="data/invertedIndex/temp/frequencies";
+    private static final String TEMP_DOC_ID_DIR ="/invertedIndex/temp/docIds";
+    private static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
 
     List<Posting> postingList;
     // score
@@ -60,10 +57,10 @@ public class PostingList {
      * @param compressed       A boolean indicating whether the data is compressed.
      * @return A PostingList object.
      */
-    public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int numberOfPosting, boolean compressed) {
+    public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int numberOfPosting, boolean compressed) throws FileNotFoundException {
         PostingList res = null;
-        try (FileInputStream docStream = new FileInputStream(TEMP_DOC_ID_DIR + "/part"+partition+".dat");
-             FileInputStream freqStream = new FileInputStream(TEMP_FREQ_DIR + "/part" + partition+".dat")){
+        try (FileInputStream docStream = new FileInputStream(Configuration.getRootDirectory()+TEMP_DOC_ID_DIR + "/part"+partition+".dat");
+             FileInputStream freqStream = new FileInputStream(Configuration.getRootDirectory()+TEMP_FREQ_DIR + "/part" + partition+".dat")){
             res = new PostingList(token);
             if (!compressed) {
                 DataInputStream dis_docStream = new DataInputStream(docStream);
@@ -73,7 +70,7 @@ public class PostingList {
                 for (int i = 0; i < numberOfPosting; i++) {
                     try {
                         // currently reading from two different streams (files)
-                        long docId = dis_docStream.readLong();
+                        int docId = dis_docStream.readInt();
                         int frq = dis_freqStream.readInt();
                         res.add(new Posting(docId,frq));        //add the Posting to the postingList
                     } catch (EOFException eof) {
@@ -84,7 +81,7 @@ public class PostingList {
                 dis_freqStream.close();
             }else{
                 // reading docIds first, then frequencies and storing them in separate lists (however they are linked by the index in the list)
-                List<Long> docIds = EliasFano.decompress(docStream, docIdOffset);
+                List<Integer> docIds = EliasFano.decompress(docStream, docIdOffset);
                 List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream,frequencyOffset,docIds.size());
 
                 // now for each pair docId - frequency I create a Posting and add it to the postinglist
@@ -102,21 +99,21 @@ public class PostingList {
     /**
      * Retrieves the current document ID from the PostingList.
      * If the PostingList has never been used (initialized), this method calls {@link #next()} to set the initial state.
-     * If the PostingList is not stored in memory or if an IOException is thrown from {@link #next()}, it returns {@link Long#MAX_VALUE}.
+     * If the PostingList is not stored in memory or if an IOException is thrown from {@link #next()}, it returns {@link Integer#MAX_VALUE}.
      * Otherwise, it returns the document ID at the current index in the PostingList.
      *
      * @return The current document ID from the PostingList.
      */
-    public long docId() {
+    public int docId() {
         if(currentDocIdIndex == -1){        //this postingList never used
             try {
                 next();
             } catch (IOException e) {
-                return Long.MAX_VALUE;
+                return Integer.MAX_VALUE;
             }
         }
         if(!inMemory){                      // if it's not stored in memory, it means that I read all the blocks
-            return Long.MAX_VALUE;
+            return Integer.MAX_VALUE;
         }
         return postingList.get(currentDocIdIndex).docid;
     }
@@ -157,6 +154,7 @@ public class PostingList {
                 LexiconEntry lexiconEntry = Lexicon.getEntry(term);
                 docIdOffset = lexiconEntry.getDocIdOffset();
                 frequencyOffset = lexiconEntry.getFrequencyOffset();
+                numBlockRead++;
             }else{
                 SkipPointer skipPointer;
                 try {
@@ -189,7 +187,7 @@ public class PostingList {
                 dis_freqStream.skipBytes(frequencyOffset);
                 for (int i = 0; i < Lexicon.getEntryValue(term,LexiconEntry::getPostingNumber); i++) {
                     try {
-                        long docId = dis_docStream.readLong();
+                        int docId = dis_docStream.readInt();
                         int frq = dis_freqStream.readInt();
                         res.add(new Posting(docId,frq));
                     } catch (EOFException eof) {
@@ -199,7 +197,7 @@ public class PostingList {
                 dis_docStream.close();
                 dis_freqStream.close();
             }else{
-                List<Long> docIds = EliasFano.decompress(docStream, docIdOffset);
+                List<Integer> docIds = EliasFano.decompress(docStream, docIdOffset);
                 List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream, frequencyOffset,Lexicon.getEntryValue(term,LexiconEntry::getPostingNumber));
                 for(int i = 0; i<docIds.size(); i++){
                     res.add(new Posting(docIds.get(i),frequency.get(i)));
@@ -221,12 +219,12 @@ public class PostingList {
      *
      * @param docId The target document ID to seek in the PostingList.
      */
-    public void nextGEQ(long docId){
+    public void nextGEQ(int docId){
         int numBlocks = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
 
-        if(inMemory && postingList.get(postingList.size() - 1).docid > docId){
-            for(int i = 0; i< postingList.size(); i++){
-                if(docId == postingList.get(i).docid){
+        if(inMemory && postingList.get(postingList.size() - 1).docid >= docId){
+            for(int i = currentDocIdIndex; i< postingList.size(); i++){
+                if(postingList.get(i).docid >= docId){
                     currentDocIdIndex = i;
                     return;
                 }
@@ -246,6 +244,7 @@ public class PostingList {
                     LexiconEntry lexiconEntry = Lexicon.getEntry(term);
                     docIdOffset = lexiconEntry.getDocIdOffset();
                     frequencyOffset = lexiconEntry.getFrequencyOffset();
+                    numBlockRead++;
                 }else {
                     SkipPointer skipPointer;
                     while (true) {
@@ -261,7 +260,7 @@ public class PostingList {
                 }
                 postingList = readFromDisk(docIdOffset, frequencyOffset);
                 for(int i = 0; i< postingList.size(); i++){
-                    if(docId == postingList.get(i).docid){
+                    if(postingList.get(i).docid >= docId){
                         currentDocIdIndex = i;
                         return;
                     }
@@ -279,4 +278,15 @@ public class PostingList {
     }
 
     public String getToken() { return term; }
+
+    @Override
+    public String toString() {
+        return "PostingList{" +
+                "postingList=" + postingList +
+                ", term='" + term + '\'' +
+                ", currentDocIdIndex=" + currentDocIdIndex +
+                ", inMemory=" + inMemory +
+                ", numBlockRead=" + numBlockRead +
+                '}';
+    }
 }

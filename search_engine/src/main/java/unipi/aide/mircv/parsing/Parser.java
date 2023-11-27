@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 public class Parser {
 
     private static final String STOPWORDS_STRING_PATH = "utils/stopwords.txt";
+    private static List<String> stopwords;
 
     // This method tokenizes the input text and performs various text processing operations based on the 'parseFlag'.
     public static List<String> getTokens(String text, boolean parseFlag) {
@@ -40,7 +41,7 @@ public class Parser {
     }
 
     // This method performs stemming on a list of tokens using PorterStemmer.
-    private static List<String> stemming(List<String>  tokens) {
+     static List<String> stemming(List<String>  tokens) {
         CustomLogger.info("Performing stemming");
         PorterStemmer porterStemmer = new PorterStemmer();
         List<String> stemmedTokens = new ArrayList<>();
@@ -51,25 +52,26 @@ public class Parser {
     }
 
     // This method filters out stopwords from a list of tokens.
-    private static List<String> stopwords_filtering(List<String> tokens) {
+    static List<String> stopwords_filtering(List<String> tokens) {
         CustomLogger.info("Performing stopwords filtering");
-        List<String> stopwords = new ArrayList<>();
-        try (Stream<String> lines = Files.lines(Paths.get(STOPWORDS_STRING_PATH))) {
-            stopwords = lines.collect(Collectors.toList());
-        } catch (IOException e) {
-            CustomLogger.error("Unable to perform stopwords filtering: file with stopwords not found");
+        if(stopwords == null){
+            try (Stream<String> lines = Files.lines(Paths.get(STOPWORDS_STRING_PATH))) {
+                stopwords = lines.collect(Collectors.toList());
+            } catch (IOException e) {
+                CustomLogger.error("Unable to perform stopwords filtering: file with stopwords not found");
+                return tokens;
+            }
         }
-        for(int i = 0; i<tokens.size(); ){
-            if(stopwords.contains(tokens.get(i)))       //is the current token a stopwords?
-                tokens.remove(tokens.get(i));
-            else
-                i++;
-        }
-        return tokens;
+
+        List<String> filteredTokens = tokens.stream()
+                .filter(token -> !stopwords.contains(token))
+                .collect(Collectors.toList());
+
+        return filteredTokens;
     }
 
     // This method removes invalid UTF-8 characters and small tokens from a list of them.
-    private static List<String> removeInvalidCharacters(List<String> tokens) {
+    static List<String> removeInvalidCharacters(List<String> tokens) {
         CustomLogger.info("Removing invalid chars");
         ArrayList<String> cleanedTokens = new ArrayList<>();
         Pattern pattern = Pattern.compile("[^\\x00-\\x7F]+");       // this regex match all the invalid UTF-8 char

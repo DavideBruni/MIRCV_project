@@ -14,13 +14,15 @@ public class LexiconEntry {
         df = 1;
     }
 
-    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, int numBlocks, int skipPointerOffset) {
+    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, int numBlocks, int postingNumber, int skipPointerOffset, double termUpperBound) {
         this.df = df;
         this.idf = idf;
         this.docIdOffset = docIdOffset;
         this.frequencyOffset = frequencyOffset;
         this.numBlocks = numBlocks;
         this.skipPointerOffset = skipPointerOffset;
+        this.postingNumber = postingNumber;
+        this.termUpperBound = termUpperBound;
     }
 
     public LexiconEntry updateDF(){
@@ -83,5 +85,23 @@ public class LexiconEntry {
     public double getTermUpperBound() {return termUpperBound;}
 
     public void setTermUpperBound(double termUpperBound) {this.termUpperBound = termUpperBound;}
+
+    @Override
+    public String toString() {
+        return " LexiconEntry{" +
+                "df=" + df +
+                ", idf=" + idf +
+                ", docIdOffset=" + docIdOffset +
+                ", frequencyOffset=" + frequencyOffset +
+                ", postingNumber=" + postingNumber +
+                ", numBlocks=" + numBlocks +
+                ", skipPointerOffset=" + skipPointerOffset +
+                ", termUpperBound=" + termUpperBound +
+                "}\n";
+    }
+
+    public void updateNumberOfPostings(int n) {
+        postingNumber+=n;
+    }
 }
 
