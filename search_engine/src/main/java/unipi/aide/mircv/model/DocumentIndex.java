@@ -15,7 +15,6 @@ public class DocumentIndex {
 
     private static final String FILE_NAME = "documentIndex.dat";
     private static DataOutputStream dataOutputStream;
-    private static DataInputStream dataInputStream;
     private static final int ENTRY_SIZE = 12;
     private static final int numEntries = 8841823;
     private static Map<Integer,DocumentInfo> index = new HashMap<>(9200000,0.97f);
@@ -23,9 +22,7 @@ public class DocumentIndex {
     private static void initializeOutputStream() throws FileNotFoundException {
         dataOutputStream = new DataOutputStream(new FileOutputStream(Configuration.getDocumentIndexPath()+FILE_NAME, true));
     }
-    private static void initializeInputStream() throws FileNotFoundException {
-        dataInputStream = new DataInputStream(new FileInputStream(Configuration.getDocumentIndexPath()+FILE_NAME));
-    }
+
 
     /***
      * Add mapping between docId and docno and document length to the Document Index, written on Disk
@@ -33,7 +30,6 @@ public class DocumentIndex {
      * @param docid         docId of the document to save
      * @param docno         pid (aka docno) of the document to save
      * @param docLen        length of the document to save
-     * @throws UnableToAddDocumentIndexException
      */
     public static void add(int docid, String docno, int docLen) throws UnableToAddDocumentIndexException {
         StreamHelper.createDir(Configuration.getDocumentIndexPath());
@@ -56,13 +52,6 @@ public class DocumentIndex {
             dataOutputStream.close();
         }catch (IOException e) {
             CustomLogger.error("Error while closing DocumentIndexOutputStream");
-        }catch (NullPointerException ne){
-
-        }
-        try{
-            dataInputStream.close();
-        } catch (IOException e) {
-            CustomLogger.error("Error while closing DocumentIndexInputStream");
         }catch (NullPointerException ne){
 
         }

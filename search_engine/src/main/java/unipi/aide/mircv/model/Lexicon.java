@@ -16,6 +16,7 @@ public class Lexicon {
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
     private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
+    private static final int LEXICON_CACHE_CAPACITY = 1000;
 
     // singleton pattern
     private static Lexicon instance;
@@ -30,6 +31,13 @@ public class Lexicon {
         entries = new TreeMap<>();
     }
 
+
+    private LinkedHashMap<String,LexiconEntry> lexiconCache = new LinkedHashMap<>(LEXICON_CACHE_CAPACITY, 0.8f, true){
+        protected boolean removeEldestEntry(Map.Entry<String, LexiconEntry> eldest)
+        {
+            return size() > LEXICON_CACHE_CAPACITY;
+        }
+    };
 
     /**
      * Retrieves the first set of tokens from the specified array of partial lexicon streams.
@@ -117,7 +125,7 @@ public class Lexicon {
 
     /**
      * Retrieves the value of a specific entry identified by the given term using the provided value extractor function.
-     * This method first attempts to retrieve the LexiconEntry associated with the term using the {@link #getEntry(String)} method.
+     * This method first attempts to retrieve the LexiconEntry associated with the term using the {@link #getEntry(String,boolean)} method.
      * If a LexiconEntry is found, the value extractor function is applied to obtain the desired value.
      *
      * @param term           The term for which to retrieve the entry value.
@@ -126,7 +134,7 @@ public class Lexicon {
      * @return The extracted value of the entry, or null if the entry is not found.
      */
     public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        LexiconEntry lexiconEntry = getEntry(term);
+        LexiconEntry lexiconEntry = getEntry(term,false);
         if (lexiconEntry!= null)
             return valueExtractor.apply(lexiconEntry);
         return null;
@@ -143,13 +151,19 @@ public class Lexicon {
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      * @see #getEntryFromDisk(String)
      */
-    public static LexiconEntry getEntry(String token) {
-        LexiconEntry res = null;
-        if(instance.entries != null)
-            res = instance.entries.get(token);
-        if(res==null){
-            res = getEntryFromDisk(token);
-            instance.add(token,res);
+    public static LexiconEntry getEntry(String token,boolean cache) {
+        LexiconEntry res = instance.lexiconCache.get(token);
+        if (res == null) {
+            if (instance.entries != null)
+                res = instance.entries.get(token);
+            if (res == null) {
+                res = getEntryFromDisk(token);
+                if(cache){
+                    instance.lexiconCache.put(token,res);
+                }else {
+                    instance.add(token, res);
+                }
+            }
         }
         return res;
     }
@@ -207,15 +221,6 @@ public class Lexicon {
         }
         lexiconEntry.updateNumberOfPostings(1);
     }
-
-    /*public static synchronized void updateEntry(String token, int docIdOffset, int frequencyOffset, int numberOfPostings) {
-        try{
-            LexiconEntry lexiconEntry = instance.entries.get(token);
-
-        }catch (Exception e){
-            CustomLogger.error("Missing "+token);
-        }
-    }*/
 
     public static void setEntry(String token, LexiconEntry lexiconEntry){
         instance.entries.put(token, lexiconEntry);

@@ -95,7 +95,7 @@ class LexiconTest {
         Lexicon.writeToDisk(false,false);
 
         for(String token : tokens)
-            assertNotNull(Lexicon.getEntry(token));
+            assertNotNull(Lexicon.getEntry(token,false));
     }
 
 

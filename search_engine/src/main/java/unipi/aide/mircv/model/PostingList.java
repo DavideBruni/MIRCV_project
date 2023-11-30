@@ -10,7 +10,6 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
-import java.util.Set;
 
 public class PostingList {
 
@@ -24,6 +23,7 @@ public class PostingList {
     int currentDocIdIndex;
     boolean inMemory;
     int numBlockRead;
+    double idf = -1;
 
     // constructors
 
@@ -76,7 +76,7 @@ public class PostingList {
                 DataInputStream dis_freqStream = new DataInputStream(freqStream);
                 dis_docStream.skipBytes(docIdOffset);
                 dis_freqStream.skipBytes(frequencyOffset);
-                for (int i = 0; i < numberOfPosting; i++) {
+                for (int i = 0; i <numberOfPosting; i++) {
                     try {
                         // currently reading from two different streams (files)
                         int docId = dis_docStream.readInt();
@@ -138,10 +138,11 @@ public class PostingList {
     public double score(){
         try {
             Posting posting = postingList.get(currentDocIdIndex);
-            return Scorer.BM25_singleTermDocumentScore(posting.frequency,posting.docid, Lexicon.getEntryValue(term,LexiconEntry::getIdf) );
-        } catch (DocumentNotFoundException | ArithmeticException e ) {
-            return 0;
-        }catch (IndexOutOfBoundsException io){
+            if(idf < 0){
+                idf = Lexicon.getEntryValue(term,LexiconEntry::getIdf);
+            }
+            return Scorer.BM25_singleTermDocumentScore(posting.frequency,posting.docid,idf);
+        } catch (DocumentNotFoundException | ArithmeticException | IndexOutOfBoundsException e ) {
             return 0;
         }
     }
@@ -156,14 +157,17 @@ public class PostingList {
         *
         * If it's written in this way to exploit how the condition are interpreted
         * */
-        if((!inMemory && Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks)  != numBlockRead) ||
-                (inMemory && ++currentDocIdIndex > postingList.size() && Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks)  != numBlockRead)) {
+        Integer numBlock = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
+        if (null == numBlock){
+            inMemory = false;
+        }else if((!inMemory &&  numBlock != numBlockRead) ||
+                (inMemory && ++currentDocIdIndex > postingList.size() && numBlock  != numBlockRead)) {
             // qua ho considerato solo il caso in cui le posting list è divisa
             // try to read
             int docIdOffset;
             int frequencyOffset;
-            if(Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks) == 1){    //check if it's divided in blocks or not
-                LexiconEntry lexiconEntry = Lexicon.getEntry(term);
+            if(numBlock == 1){    //check if it's divided in blocks or not
+                LexiconEntry lexiconEntry = Lexicon.getEntry(term,false);
                 docIdOffset = lexiconEntry.getDocIdOffset();
                 frequencyOffset = lexiconEntry.getFrequencyOffset();
                 numBlockRead++;
@@ -193,12 +197,13 @@ public class PostingList {
         List<Posting> res = new ArrayList<>();
         try (FileInputStream docStream = new FileInputStream(Configuration.getDocumentIdsPath());
              FileInputStream freqStream = new FileInputStream(Configuration.getFrequencyPath())){
+            int postingNumber = Lexicon.getEntryValue(term,LexiconEntry::getPostingNumber);
             if (!Configuration.isCOMPRESSED()) {
                 DataInputStream dis_docStream = new DataInputStream(docStream);
                 DataInputStream dis_freqStream = new DataInputStream(freqStream);
                 dis_docStream.skipBytes(docIdOffset);
                 dis_freqStream.skipBytes(frequencyOffset);
-                for (int i = 0; i < Lexicon.getEntryValue(term,LexiconEntry::getPostingNumber); i++) {
+                for (int i = 0; i < postingNumber; i++) {
                     try {
                         int docId = dis_docStream.readInt();
                         int frq = dis_freqStream.readInt();
@@ -211,8 +216,9 @@ public class PostingList {
                 dis_freqStream.close();
             }else{
                 List<Integer> docIds = EliasFano.decompress(docStream, docIdOffset);
-                List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream, frequencyOffset,Lexicon.getEntryValue(term,LexiconEntry::getPostingNumber));
-                for(int i = 0; i<docIds.size(); i++){
+                List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream, frequencyOffset,postingNumber);
+                int len = docIds.size();
+                for(int i = 0; i<len; i++){
                     res.add(new Posting(docIds.get(i),frequency.get(i)));
                 }
             }
@@ -231,7 +237,7 @@ public class PostingList {
      * @param docId The target document ID to seek in the PostingList.
      */
     public void nextGEQ(int docId){
-        int numBlocks = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
+        Integer numBlocks = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
 
         if(inMemory && postingList.get(postingList.size() - 1).docid >= docId){
             for(int i = currentDocIdIndex; i< postingList.size(); i++){
@@ -240,8 +246,8 @@ public class PostingList {
                     return;
                 }
             }
-        }else if((!inMemory && numBlocks != numBlockRead) ||
-                (inMemory && ++currentDocIdIndex > postingList.size() && numBlocks != numBlockRead)) {
+        }else if(numBlocks != null && ((!inMemory && numBlocks != numBlockRead) ||
+                (inMemory && ++currentDocIdIndex > postingList.size() && numBlocks != numBlockRead))) {
             /*
              * if PostingList is not in RAM and I don't already read all the blocks
              *  or if it's in memory currentDocIdINdex is greater than the postinglist size and I don't already read all the blocks
@@ -252,7 +258,7 @@ public class PostingList {
                 int docIdOffset;
                 int frequencyOffset;
                 if(numBlocks == 1){    //check if it's divided in blocks or not
-                    LexiconEntry lexiconEntry = Lexicon.getEntry(term);
+                    LexiconEntry lexiconEntry = Lexicon.getEntry(term,false);
                     docIdOffset = lexiconEntry.getDocIdOffset();
                     frequencyOffset = lexiconEntry.getFrequencyOffset();
                     numBlockRead++;
@@ -270,7 +276,8 @@ public class PostingList {
                     frequencyOffset = skipPointer.getFrequencyOffset();
                 }
                 postingList = readFromDisk(docIdOffset, frequencyOffset);
-                for(int i = 0; i< postingList.size(); i++){
+                int len = postingList.size();
+                for(int i = 0; i< len; i++){
                     if(postingList.get(i).docid >= docId){
                         currentDocIdIndex = i;
                         return;
@@ -306,7 +313,7 @@ public class PostingList {
         // check posting list dimension (if is the final one) to eventually create skipping-pointers
         if (is_merged && (postingList.size() * 8 > POSTING_SIZE_THRESHOLD)){
             //customLogger.info("Generating skipping pointers");
-            addSkipPointers(term, lexiconEntry);       // we can create them directly, we have fixed dimension for docIds and frequencies
+            addSkipPointers(lexiconEntry);       // we can create them directly, we have fixed dimension for docIds and frequencies
             Lexicon.setEntry(term,lexiconEntry);
         }
         for (Posting posting : postingList) {              //for each posting in postingList
@@ -328,15 +335,15 @@ public class PostingList {
     /**
      * Adds skip pointers to the Lexicon entry for the given token based on the posting list.
      *
-     * @param token         The token for which skip pointers are being added.
      * @param lexiconEntry  The lexicon entry associated with the token.
      */
-    private void addSkipPointers(String token, LexiconEntry lexiconEntry) {
+    private void addSkipPointers(LexiconEntry lexiconEntry) {
         int blockSize = (int) Math.round(Math.sqrt(postingList.size()));
         int i = 0;
         int numBlocks = 0;
         List<SkipPointer> skippingPointers = new ArrayList<>();
-        for(int j = 0; j<postingList.size();j++){
+        int len = postingList.size();
+        for(int j = 0; j<len;j++){
             if (++i == blockSize || j == postingList.size() - 1){        // last block could be smaller
                 int docIdsOffset = i * numBlocks * Integer.BYTES;
                 int frequencyOffset = i * numBlocks * Integer.BYTES;

@@ -35,7 +35,7 @@ public class ScorerTest {
         PostingList[] postingLists = getPostingLists(parsedQuery);
 
         Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
-                Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Lexicon.getEntry(postingList.getToken(),false).getTermUpperBound());
         Arrays.sort(postingLists, termUpperBoundComparator);
         PriorityQueue<Scorer.DocScorePair> result = Scorer.maxScore(postingLists, false);
 
@@ -64,7 +64,7 @@ public class ScorerTest {
 
 
         Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
-                Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Lexicon.getEntry(postingList.getToken(),false).getTermUpperBound());
         Arrays.sort(postingLists, termUpperBoundComparator);
         PriorityQueue<Scorer.DocScorePair> result = Scorer.maxScore(postingLists, false);
 
@@ -90,7 +90,7 @@ public class ScorerTest {
         PostingList[] postingLists = getPostingLists(parsedQuery);
 
         Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
-                Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Lexicon.getEntry(postingList.getToken(),false).getTermUpperBound());
         Arrays.sort(postingLists, termUpperBoundComparator);
         PriorityQueue<Scorer.DocScorePair> result = Scorer.maxScore(postingLists, true);
 
@@ -117,7 +117,7 @@ public class ScorerTest {
         PostingList[] postingLists = getPostingLists(parsedQuery);
 
         Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
-                Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Lexicon.getEntry(postingList.getToken(),false).getTermUpperBound());
         Arrays.sort(postingLists, termUpperBoundComparator);
         PriorityQueue<Scorer.DocScorePair> result = Scorer.maxScore(postingLists, true);
 
@@ -143,7 +143,7 @@ public class ScorerTest {
         PostingList[] postingLists = getPostingLists(parsedQuery);
 
         Comparator<PostingList> termUpperBoundComparator = Comparator.comparingDouble(postingList ->
-                Lexicon.getEntry(postingList.getToken()).getTermUpperBound());
+                Lexicon.getEntry(postingList.getToken(),false).getTermUpperBound());
         Arrays.sort(postingLists, termUpperBoundComparator);
         PriorityQueue<Scorer.DocScorePair> result = Scorer.maxScore(postingLists, false);
 

@@ -89,13 +89,15 @@ public class PostingLists {
                 int offset = 0;
                 try(DataOutputStream docStream_dos = new DataOutputStream(docStream);
                     DataOutputStream freqStream_dos = new DataOutputStream(freqStream)) {
-                    for(String token : postings.keySet())
-                        offset = postings.get(token).writeToDiskNotCompressed(docStream_dos, freqStream_dos, offset, false, Lexicon.getEntry(token));
+                    Set<String> keySet = postings.keySet();
+                    for(String token : keySet)
+                        offset = postings.get(token).writeToDiskNotCompressed(docStream_dos, freqStream_dos, offset, false, Lexicon.getEntry(token,false));
                 }
             }else{
                 int [] offsets = new int[2];
-                for(String token : postings.keySet())
-                    offsets = postings.get(token).writeToDiskCompressed(docStream, freqStream,offsets[0], offsets[1], false, Lexicon.getEntry(token));
+                Set<String> keySet = postings.keySet();
+                for(String token : keySet)
+                    offsets = postings.get(token).writeToDiskCompressed(docStream, freqStream,offsets[0], offsets[1], false, Lexicon.getEntry(token, false));
             }
             NUM_FILE_WRITTEN++;
 

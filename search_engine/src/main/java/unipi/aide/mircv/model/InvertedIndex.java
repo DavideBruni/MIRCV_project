@@ -6,6 +6,7 @@ import unipi.aide.mircv.exceptions.*;
 import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.parsing.Parser;
+import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
 import java.nio.file.Paths;
@@ -113,6 +114,7 @@ public class InvertedIndex {
         PostingLists mergedPostingLists = new PostingLists();
         // 1. I have to keep open one stream for each lexicon partition
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
+        PriorityQueue<LexiconEntry> lexiconCache = new PriorityQueue<>(Comparator.comparingInt(LexiconEntry::getDf));
         String[] lowestTokens;
         try {
             // 2. In order to find the "lowest" token, I read the smallest token for each stream, in this case, the firsts
