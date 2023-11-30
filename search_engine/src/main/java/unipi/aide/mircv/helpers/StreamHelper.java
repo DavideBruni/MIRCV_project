@@ -45,9 +45,9 @@ public class StreamHelper {
         // Elimina la directory temp
         try {
             Files.delete(path);
-            CustomLogger.info("Directory deleted: " + path);
+            // CustomLogger.info("Directory deleted: " + path);
         } catch (IOException e) {
-            CustomLogger.error("Error deleting directory " + path + ": " + e.getMessage());
+            // CustomLogger.error("Error deleting directory " + path + ": " + e.getMessage());
         }
     }
 
@@ -57,7 +57,7 @@ public class StreamHelper {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     Files.delete(file);
-                    CustomLogger.info("File deleted: " + file);
+                    // CustomLogger.info("File deleted: " + file);
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -77,7 +77,7 @@ public class StreamHelper {
         deleteFilesInDirectory(subDirectory);
         try {
             Files.delete(subDirectory);
-            CustomLogger.info("Directory deleted: " + subDirectory);
+            //CustomLogger.info("Directory deleted: " + subDirectory);
         } catch (IOException e) {
             CustomLogger.error("Error deleting directory " + subDirectory + ": " + e.getMessage());
         }

@@ -26,11 +26,15 @@ public class QueryProcessorMain {
         Configuration.setMinheapDimension(Integer.parseInt(args[2]));
         Scanner scanner = new Scanner(System.in);
 
+        Configuration.setUpPaths("data");
+
         try {
             CollectionStatistics.readFromDisk();
         } catch (MissingCollectionStatisticException e) {
             CustomLogger.error("Error in setting up environment");
         }
+
+        Lexicon lexicon = Lexicon.getInstance();
 
         System.out.println("To perform conjuctive query, start it with \"+\" character\n");
 
@@ -66,7 +70,7 @@ public class QueryProcessorMain {
             long timestamp_stop = System.currentTimeMillis();
             CustomLogger.info("("+(timestamp_stop-timestamp_start)+" milliseconds )");
 
-            Lexicon.clear();
+            // Lexicon.clear();
 
         }
         scanner.close();
@@ -76,7 +80,7 @@ public class QueryProcessorMain {
     private static PostingList[] getPostingLists(List<String> terms) {
         PostingList [] postingLists = new PostingList[terms.size()];
         for(String term : terms){
-            postingLists[terms.indexOf(term)] = new PostingList(term);
+            postingLists[terms.indexOf(term)] = new PostingList(term,false);
         }
         return postingLists;
     }

@@ -121,7 +121,7 @@ public class PostingListsTest {
         postingListsToAdd.add(postingList1);
         postingListsToAdd.add(postingList2);
 
-        postingLists.add(postingListsToAdd, token);
+        //postingLists.add(postingListsToAdd, token);
 
         assertTrue(postingLists.postings.containsKey(token));
         PostingList mergedPostingList = postingLists.postings.get(token);

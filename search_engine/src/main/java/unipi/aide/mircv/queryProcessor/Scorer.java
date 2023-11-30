@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 public class Scorer {
     private static final double NORMALIZATION_PARAMETER_B = 0.70;
+    private static final double NORMALIZATION_OPPOSITE_B = 0.30;
     private static final double NORMALIZATION_PARAMETER_K1 = 1.5;
 
 
@@ -32,56 +33,28 @@ public class Scorer {
         return (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
     }
 
-
-    private static double localMaxScore(List<Posting> postingList, double idf, double averageDocumentLength){
-        double localScore = 0.0;
+    /**
+     * Calculates the upper bound of BM25 scores for a term in a posting list and set it in provided LexiconEntry.
+     *
+     * @param postingList   The posting list containing the term occurrences.
+     * @param lexiconEntry  The LexiconEntry corresponding to the term.
+     */
+    public static void BM25_termUpperBound(List<Posting> postingList, LexiconEntry lexiconEntry){
+        double maxScore = 0.0;
+        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
+        double idf = lexiconEntry.getIdf();
 
         for(Posting posting : postingList){
             int tf = posting.getFrequency();
             try {
                 int documentLength = DocumentIndex.getDocumentLength(posting.getDocid());
-                double score = (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
-                localScore = Math.max(localScore, score);
+                double score = (tf / (NORMALIZATION_PARAMETER_K1*(NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
+                maxScore = Math.max(maxScore, score);
             } catch (DocumentNotFoundException e) {
                 CustomLogger.error("Document "+posting.getDocid()+ " not found");
             }
         }
-        return localScore;
-    }
-    static double maxScore = 0;
-    public static void BM25_termUpperBound(PostingList postingList, LexiconEntry lexiconEntry) {
-        CustomLogger.info("Calculating term upper bound for token: "+postingList.getToken());
-        double idf = lexiconEntry.getIdf();
-        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
-
-        List<Posting> postings = postingList.getPostingList();
-        int numThreads = Math.min(20, postings.size() / 100 + 1);
-
-        ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
-        try {
-            for (int i = 0; i < numThreads; i++) {
-                int startIndex = i * 100;
-                int endIndex = Math.min((i + 1) * 100, postings.size());
-
-                List<Posting> sublist = postings.subList(startIndex, endIndex);
-
-                // submit the task (lambda function) to one executor (one thread)
-                executorService.submit(() -> {
-                    double localMaxScore = localMaxScore(sublist,idf,averageDocumentLength);    // find localMaxScore
-                    synchronized (Scorer.class) {                       // need to avoid inconsistency
-                        maxScore = Math.max(maxScore, localMaxScore);
-                    }
-                });
-            }
-        } finally {
-            executorService.shutdown();
-            try {
-                // wait that all the threads end
-                executorService.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
+        lexiconEntry.setTermUpperBound(maxScore);
     }
 
 
@@ -109,9 +82,9 @@ public class Scorer {
         int pivot = 0;
         int current = minimumDocid(postingLists);
 
-        while (pivot < postingLists.length && current != Long.MAX_VALUE) {
+        while (pivot < postingLists.length && current != Integer.MAX_VALUE-1) {
             double score = 0;
-            int next = Integer.MAX_VALUE;
+            int next = Integer.MAX_VALUE - 1;
 
             for (int i = pivot; i <postingLists.length; i++) { // Essential lists
                 if (postingLists[i].docId() == current) {

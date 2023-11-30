@@ -3,8 +3,8 @@ package unipi.aide.mircv.model;
 import java.util.List;
 
 public class ParsedDocument {
-    private String pid;
-    private List<String> tokens;
+    private final String pid;
+    private final List<String> tokens;
 
     public ParsedDocument(String pid, List<String> tokens) {
         this.pid = pid;

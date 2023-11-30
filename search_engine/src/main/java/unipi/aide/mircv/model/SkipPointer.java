@@ -57,10 +57,12 @@ public class SkipPointer {
         return tmp;
     }
 
-    public void setDocIdOffset(int i) {
+    public void setDocIdOffset(int docIdsOffset) {
+        this.docIdsOffset = docIdsOffset;
     }
 
-    public void setFrequencyOffset(int i) {
+    public void setFrequencyOffset(int frequencyOffset) {
+        this.frequencyOffset = frequencyOffset;
     }
 
     public void setNumberOfDocId(int size) {

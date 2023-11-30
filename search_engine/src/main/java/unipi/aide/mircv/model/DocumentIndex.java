@@ -7,12 +7,18 @@ import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 
 import java.io.*;
+import java.util.HashMap;
+import java.util.Map;
+
 
 public class DocumentIndex {
 
     private static final String FILE_NAME = "documentIndex.dat";
     private static DataOutputStream dataOutputStream;
     private static DataInputStream dataInputStream;
+    private static final int ENTRY_SIZE = 12;
+    private static final int numEntries = 8841823;
+    private static Map<Integer,DocumentInfo> index = new HashMap<>(9200000,0.97f);
 
     private static void initializeOutputStream() throws FileNotFoundException {
         dataOutputStream = new DataOutputStream(new FileOutputStream(Configuration.getDocumentIndexPath()+FILE_NAME, true));
@@ -50,11 +56,15 @@ public class DocumentIndex {
             dataOutputStream.close();
         }catch (IOException e) {
             CustomLogger.error("Error while closing DocumentIndexOutputStream");
+        }catch (NullPointerException ne){
+
         }
         try{
             dataInputStream.close();
         } catch (IOException e) {
             CustomLogger.error("Error while closing DocumentIndexInputStream");
+        }catch (NullPointerException ne){
+
         }
     }
 
@@ -87,25 +97,42 @@ public class DocumentIndex {
      * @return              the length of the document as number of tokens in it
      */
     public static int getDocumentLength(int docIdToFind) throws DocumentNotFoundException {
-        try {
-            if(dataInputStream == null)
-                initializeInputStream();
-            while (dataInputStream.available() > 0) {
-                dataInputStream.skipBytes(Integer.BYTES);
-                int docid = dataInputStream.readInt();
-                int docLen = dataInputStream.readInt();
-                if (docIdToFind == docid) {
-                    return docLen;
+        DocumentInfo documentInfo = index.get(docIdToFind);
+        if (documentInfo == null) {
+            long low = 0;
+            long high = numEntries;
+            long mid;
+
+            try (RandomAccessFile file = new RandomAccessFile(Configuration.getDocumentIndexPath()+FILE_NAME, "r")) {
+                while (low <= high) {
+                    mid = (low + high) >>> 1;
+
+                    file.seek(mid * ENTRY_SIZE);       // position at mid-file (or mid "partition" if it's not the first iteration)
+
+                    // read the record and parse it to string
+                    String docno = String.valueOf(file.readInt());
+                    int docId = file.readInt();
+                    int documentLength = file.readInt();
+                    documentInfo = new DocumentInfo(docno, docId, documentLength);
+                    if (!index.containsKey(docId))
+                        index.put(docId, documentInfo);
+
+                    if (docId == docIdToFind) {       //find the entry
+                        return documentLength;
+                    } else if (docId < docIdToFind) {     // current entry is lower than target one
+                        low = mid + 1;
+                    } else {                // current entry is greater than target one
+                        high = mid - 1;
+                    }
                 }
+
+            } catch (IOException e) {
+                throw new DocumentNotFoundException("Document not found in the index.");
             }
-        } catch (FileNotFoundException e) {
-            CustomLogger.error("Document index file not found.");
-            throw new DocumentNotFoundException("Document index file not found.");
-        } catch (IOException e) {
             CustomLogger.error("Document not found in the index.");
             throw new DocumentNotFoundException("Document not found in the index.");
+        } else {
+            return documentInfo.getDocLen();
         }
-        CustomLogger.error("Document not found in the index.");
-        throw new DocumentNotFoundException("Document not found in the index.");
     }
 }

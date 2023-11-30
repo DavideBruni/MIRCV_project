@@ -58,12 +58,7 @@ public class CollectionStatistics {
 
     public static int getLongestTermLength() { return lengthLongestTerm; }
 
-    public static void setNumberOfToken(int length) { numberOfTokens = length; }
-
     public static void updateNumberOfToken(long value) {
-        if(numberOfTokens == Long.MAX_VALUE){
-            System.out.println("Problema!!");
-        }
         numberOfTokens = numberOfTokens + value;
     }
 

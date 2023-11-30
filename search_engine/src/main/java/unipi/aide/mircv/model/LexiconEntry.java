@@ -25,9 +25,8 @@ public class LexiconEntry {
         this.termUpperBound = termUpperBound;
     }
 
-    public LexiconEntry updateDF(){
+    public void updateDF(){
         df++;
-        return this;
     }
 
     public void setDocIdOffset(int docIdOffset) {

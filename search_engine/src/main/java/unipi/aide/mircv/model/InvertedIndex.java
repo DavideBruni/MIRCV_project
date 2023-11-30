@@ -6,7 +6,6 @@ import unipi.aide.mircv.exceptions.*;
 import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.parsing.Parser;
-import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
 import java.nio.file.Paths;
@@ -23,7 +22,7 @@ public class InvertedIndex {
      * @param parse         indicate if perform stemming and stopwords filtering
      */
     private static void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean debug) throws IOException {
-        CustomLogger.info("Start SPIMI algorithm");
+        //customLogger.info("Start SPIMI algorithm");
         PostingLists postingLists = new PostingLists();
         Lexicon lexicon = Lexicon.getInstance();
         // Create a BufferedReader to read the file line by line
@@ -33,16 +32,16 @@ public class InvertedIndex {
                 boolean freeMemory = true;
                 while (Runtime.getRuntime().freeMemory() > (Runtime.getRuntime().totalMemory() * 20 / 100)) {      // build index until 80% of total memory is used
                     freeMemory = false;
-                    CustomLogger.info("Reading new document...");
+                    //customLogger.info("Reading new document...");
                     String line;
                     if ((line = reader.readLine()) != null) {
                         if (line.isBlank()){             // if the line read is empty, skip it
-                            CustomLogger.info("Document is empty, skipped");
+                            //customLogger.info("Document is empty, skipped");
                             continue;
                         }
 
                         ParsedDocument parsedDocument;
-                        CustomLogger.info("Parsing document (candidate id "+lastDocId+"), searching PID and getting tokens");
+                        //customLogger.info("Parsing document (candidate id "+lastDocId+"), searching PID and getting tokens");
                         try {
                             // if flag is set, remove stopwords and perform stemming
                             parsedDocument = Parser.parseDocument(line, parse);
@@ -72,17 +71,17 @@ public class InvertedIndex {
                         }
                     }else{
                         allDocumentProcessed = true;
-                        CustomLogger.info("All document have been processed");
+                        //customLogger.info("All document have been processed");
                         break;
                     }
                 }
                 if(!freeMemory) {
                     /* necessary because sometimes the while condition remain false for a certain amount of time, so I don't want
                         to write empty index on disk */
-                    CustomLogger.info("Sorting posting lists generated (last document id was " + lastDocId + ") and write them on disk");
+                    //customLogger.info("Sorting posting lists generated (last document id was " + lastDocId + ") and write them on disk");
                     postingLists.sort();
                     try {
-                        CustomLogger.info("Writing lexicon on disk");
+                        //customLogger.info("Writing lexicon on disk");
                         postingLists.writeToDisk(Configuration.isCOMPRESSED());
                     } catch (PostingListStoreException pe) {
                         break;
@@ -98,7 +97,7 @@ public class InvertedIndex {
                     Lexicon.clear();
                     postingLists = new PostingLists();
                 }
-                //Runtime.getRuntime().gc();
+                Runtime.getRuntime().gc();
             }
             DocumentIndex.closeStreams();
         } catch (UnableToWriteLexiconException e) {
@@ -110,7 +109,7 @@ public class InvertedIndex {
     }
 
     private static void Merge(boolean debug) {
-        CustomLogger.info("Starting merging operation...");
+        //customLogger.info("Starting merging operation...");
         PostingLists mergedPostingLists = new PostingLists();
         // 1. I have to keep open one stream for each lexicon partition
         DataInputStream[] partialLexiconStreams = Lexicon.getStreams();
@@ -125,6 +124,12 @@ public class InvertedIndex {
         }
         try (FileOutputStream docStream = new FileOutputStream(Configuration.getDocumentIdsPath());
              FileOutputStream freqStream = new FileOutputStream(Configuration.getFrequencyPath())){
+            DataOutputStream dos_docStream = null;
+            DataOutputStream dos_freqStream = null;
+            if(!Configuration.isCOMPRESSED()){
+                dos_docStream = new DataOutputStream(docStream);
+                dos_freqStream = new DataOutputStream(freqStream);
+            }
             int offset = 0;
             int[] compressed_offset = new int[]{0,0};
             while(true) {
@@ -136,7 +141,7 @@ public class InvertedIndex {
                 int df = 0;
                 double idf;
                 List<PostingList> postingLists = new ArrayList<>();
-                CustomLogger.info("Retrieving all the posting list for token '" + token +"'");
+                // CustomLogger.info("Retrieving all the posting list for token '" + token +"'");
                 for (int i = 0; i < lowestTokens.length; i++) {
                     if (lowestTokens[i] != null && lowestTokens[i].equals(token)) {
                         // I consider only partitions that have the lowest token (they could be more than 1)
@@ -155,8 +160,8 @@ public class InvertedIndex {
                         }
                     }
                 }
-                CustomLogger.info("Merging posting lists together");
-                mergedPostingLists.add(postingLists, token);
+                //customLogger.info("Merging posting lists together");
+                PostingList mergedPostingList = PostingLists.merge(postingLists, token);
                 // Update lexicon entry
                 idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
                 lexiconEntry.setDf(df);
@@ -167,21 +172,19 @@ public class InvertedIndex {
                 Lexicon.getInstance().add(token, lexiconEntry);
                 // I have to store the merged posting list on disk
                 if (!Configuration.isCOMPRESSED()) {
-                    DataOutputStream dos_docStream = new DataOutputStream(docStream);
-                    DataOutputStream dos_freqStream = new DataOutputStream(freqStream);
-                    offset = mergedPostingLists.writeToDiskNotCompressed(dos_docStream,dos_freqStream,offset, true);
+                    offset = mergedPostingList.writeToDiskNotCompressed(dos_docStream,dos_freqStream,offset, true, lexiconEntry);
                 }else{
-                    compressed_offset = mergedPostingLists.writeToDiskCompressed(docStream,freqStream,compressed_offset[0],compressed_offset[1],true);
+                    compressed_offset = mergedPostingList.writeToDiskCompressed(docStream,freqStream,compressed_offset[0],compressed_offset[1],true,lexiconEntry);
                 }
-                Scorer.BM25_termUpperBound(mergedPostingLists.postings.get(token),lexiconEntry);
-                Lexicon.getInstance().add(token, lexiconEntry);
 
                 if(debug){
-                    System.out.println(mergedPostingLists);
+                    System.out.println(mergedPostingList);
                 }
-                mergedPostingLists = new PostingLists();
+
+                Lexicon.getInstance().add(token, lexiconEntry);
+
                 if(Lexicon.getInstance().numberOfEntries() >= 30){     //28 byte + dim parola
-                    CollectionStatistics.updateNumberOfToken(Lexicon.getInstance().numberOfEntries());
+                    CollectionStatistics.updateNumberOfToken(Lexicon.getInstance().numberOfEntries());  //30
                     if(debug)
                         System.out.println(Lexicon.getInstance());
                     // every 30 entries write to disk, it's better than write every entry
@@ -189,6 +192,11 @@ public class InvertedIndex {
                     Lexicon.clear();
                 }
                 Lexicon.getTokens(lowestTokens, partialLexiconStreams);
+            }
+
+            if(!Configuration.isCOMPRESSED()){
+                dos_docStream.close();
+                dos_freqStream.close();
             }
 
         } catch (IOException | PartialLexiconNotFoundException | UnableToWriteLexiconException e) {
@@ -253,14 +261,15 @@ public class InvertedIndex {
      * @param parse                A boolean flag indicating whether to perform document parsing during the SPIMI phase.
      */
     public static void createInvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse, boolean debug) throws IOException {
-        SPIMI(tarArchiveInputStream, parse, debug);
-        if(!allDocumentProcessed){
+       SPIMI(tarArchiveInputStream, parse, debug);
+       CollectionStatistics.writeToDisk();
+       if(!allDocumentProcessed){
             CustomLogger.error("Index Creation aborted, read the log to find the cause");
-        }else{
+       }else{
             Merge(debug);
             CollectionStatistics.writeToDisk();
-        }
-        StreamHelper.deleteDir(Paths.get(Configuration.getRootDirectory(), "invertedIndex", "temp"));
+       }
+       StreamHelper.deleteDir(Paths.get(Configuration.getRootDirectory(), "invertedIndex", "temp"));
     }
 
 

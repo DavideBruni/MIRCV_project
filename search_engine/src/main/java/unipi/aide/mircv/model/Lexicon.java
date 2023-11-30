@@ -132,7 +132,6 @@ public class Lexicon {
         return null;
     }
 
-    public boolean contains(String token) { return entries.containsKey(token); }
 
 
     /**
@@ -209,16 +208,14 @@ public class Lexicon {
         lexiconEntry.updateNumberOfPostings(1);
     }
 
-    public static synchronized void updateEntry(String token, int docIdOffset, int frequencyOffset, int numberOfPostings) {
+    /*public static synchronized void updateEntry(String token, int docIdOffset, int frequencyOffset, int numberOfPostings) {
         try{
             LexiconEntry lexiconEntry = instance.entries.get(token);
-            lexiconEntry.setDocIdOffset(docIdOffset);
-            lexiconEntry.setFrequencyOffset(frequencyOffset);
-            lexiconEntry.setPostingNumber(numberOfPostings);
+
         }catch (Exception e){
             CustomLogger.error("Missing "+token);
         }
-    }
+    }*/
 
     public static void setEntry(String token, LexiconEntry lexiconEntry){
         instance.entries.put(token, lexiconEntry);

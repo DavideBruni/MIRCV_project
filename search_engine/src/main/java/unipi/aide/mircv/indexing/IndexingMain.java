@@ -5,12 +5,13 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.model.CollectionStatistics;
 import unipi.aide.mircv.model.InvertedIndex;
 
+import javax.sound.midi.Soundbank;
 import java.io.*;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.format.DateTimeFormatter;
 
 public class IndexingMain {
 
@@ -50,6 +51,9 @@ public class IndexingMain {
                     // Format the duration as "HH:mm:ss:SSS"
                     String formattedTime = String.format("%02d:%02d:%02d:%03d",duration.toHoursPart(), duration.toMinutesPart(), duration.toSecondsPart(), duration.toMillisPart());
                     CustomLogger.info(formattedTime);
+
+                    CustomLogger.info("\nCollection stats:\n");
+                    CollectionStatistics.print();
                 }
             }
         } catch (FileNotFoundException e) {
