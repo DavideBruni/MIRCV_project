@@ -8,7 +8,6 @@ import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.CollectionStatistics;
 import unipi.aide.mircv.model.InvertedIndex;
 
-import javax.sound.midi.Soundbank;
 import java.io.*;
 import java.nio.file.Path;
 import java.time.Duration;

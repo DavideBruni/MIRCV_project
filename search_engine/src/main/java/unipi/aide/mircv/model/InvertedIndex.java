@@ -261,21 +261,15 @@ public class InvertedIndex {
      * @param parse                A boolean flag indicating whether to perform document parsing during the SPIMI phase.
      */
     public static void createInvertedIndex(TarArchiveInputStream tarArchiveInputStream, boolean parse, boolean debug) throws IOException {
-       /*SPIMI(tarArchiveInputStream, parse, debug);
+       SPIMI(tarArchiveInputStream, parse, debug);
        CollectionStatistics.writeToDisk();
        if(!allDocumentProcessed){
             CustomLogger.error("Index Creation aborted, read the log to find the cause");
-       }else{*/
-        Lexicon.getInstance();
-        try {
-            CollectionStatistics.readFromDisk();
-        } catch (MissingCollectionStatisticException e) {
-            throw new RuntimeException(e);
-        }
+       }else{
         Merge(debug);
-          //  CollectionStatistics.writeToDisk();
-      // }
-       //StreamHelper.deleteDir(Paths.get(Configuration.getRootDirectory(), "invertedIndex", "temp"));
+        CollectionStatistics.writeToDisk();
+       }
+       StreamHelper.deleteDir(Paths.get(Configuration.getRootDirectory(), "invertedIndex", "temp"));
     }
 
 
