@@ -6,6 +6,7 @@ import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.*;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -154,11 +155,11 @@ public class Scorer {
         return minDocid;
     }
 
-    static class DocScorePair implements Comparable{
-        private long docid;
+    static class DocScorePair implements Comparable, Serializable {
+        private int docid;
         private double score;
 
-        public DocScorePair(long docid, double score) {
+        public DocScorePair(int docid, double score) {
             this.docid = docid;
             this.score = score;
         }
@@ -166,6 +167,8 @@ public class Scorer {
         public double getScore() {
             return score;
         }
+
+        public String getPid(){return DocumentIndex.getDocno(docid);}
 
         @Override
         public boolean equals(Object obj) {
@@ -182,6 +185,13 @@ public class Scorer {
             DocScorePair tmp = (DocScorePair) o;
             return Double.compare(this.getScore(),tmp.getScore());
         }
+
+        @Override
+        public String toString() {
+            return DocumentIndex.getDocno(docid) + "\n";
+        }
+
+
     }
 
 }

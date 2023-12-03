@@ -265,7 +265,7 @@ public class PostingList {
                 }else {
                     SkipPointer skipPointer;
                     while (true) {
-                        skipPointer = SkipPointer.readFromDisk(numBlocks, numBlockRead);
+                        skipPointer = SkipPointer.readFromDisk(Lexicon.getEntryValue(term,LexiconEntry::getSkipPointerOffset), numBlockRead);
                         numBlockRead++;
                         if (skipPointer.getMaxDocId() >= docId)
                             break;
@@ -313,7 +313,7 @@ public class PostingList {
         // check posting list dimension (if is the final one) to eventually create skipping-pointers
         if (is_merged && (postingList.size() * 8 > POSTING_SIZE_THRESHOLD)){
             //customLogger.info("Generating skipping pointers");
-            addSkipPointers(lexiconEntry);       // we can create them directly, we have fixed dimension for docIds and frequencies
+            addSkipPointers(lexiconEntry,offset);       // we can create them directly, we have fixed dimension for docIds and frequencies
             Lexicon.setEntry(term,lexiconEntry);
         }
         for (Posting posting : postingList) {              //for each posting in postingList
@@ -337,7 +337,7 @@ public class PostingList {
      *
      * @param lexiconEntry  The lexicon entry associated with the token.
      */
-    private void addSkipPointers(LexiconEntry lexiconEntry) {
+    private void addSkipPointers(LexiconEntry lexiconEntry, int offset) {
         int blockSize = (int) Math.round(Math.sqrt(postingList.size()));
         int i = 0;
         int numBlocks = 0;
@@ -345,8 +345,8 @@ public class PostingList {
         int len = postingList.size();
         for(int j = 0; j<len;j++){
             if (++i == blockSize || j == postingList.size() - 1){        // last block could be smaller
-                int docIdsOffset = i * numBlocks * Integer.BYTES;
-                int frequencyOffset = i * numBlocks * Integer.BYTES;
+                int docIdsOffset = (i * numBlocks * Integer.BYTES) + (offset * Integer.BYTES);
+                int frequencyOffset = docIdsOffset;
                 skippingPointers.add(new SkipPointer(postingList.get(j).docid,docIdsOffset,frequencyOffset,i));
                 i = 0;
                 numBlocks++;
@@ -462,22 +462,15 @@ public class PostingList {
      */
     private void initializeSkipPointers(int blockSize, List<List<Posting>> postingListsToCompress, List<SkipPointer> skipPointers, List<Posting> postingLists) {
         int i=0;
-        List<Posting> tmp = new ArrayList<>();
+        int j=0;
 
         while(true){
-            try {
-                tmp.add(postingLists.get(i++));             // take one posting list at time and accumulate them
-                if (i % blockSize == 0){                    //Each block contains blockSize postings
-                    postingListsToCompress.add(tmp);        // populate the list of posting list
-                    skipPointers.add(new SkipPointer());
-                    tmp.clear();
-                }
-            }catch (IndexOutOfBoundsException ex){
-                if(!tmp.isEmpty()) {     //last block could be smaller, so the previous block could throw this exception
-                    postingListsToCompress.add(tmp);
-                    skipPointers.add(new SkipPointer());
-                }
-                break;
+            if (++i % blockSize == 0 || i >= postingLists.size()){                    //Each block contains blockSize postings
+                postingListsToCompress.add(postingLists.subList(j,i));                // populate the list of posting list
+                skipPointers.add(new SkipPointer());
+                j = i;
+                if(i >= postingLists.size())
+                    break;
             }
         }
     }

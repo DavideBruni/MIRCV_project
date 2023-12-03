@@ -16,7 +16,7 @@ public class DocumentIndex {
     private static final String FILE_NAME = "documentIndex.dat";
     private static DataOutputStream dataOutputStream;
     private static final int ENTRY_SIZE = 12;
-    private static final int numEntries = 8841823;
+    private static int numEntries;
     private static Map<Integer,DocumentInfo> index = new HashMap<>(9200000,0.97f);
 
     private static void initializeOutputStream() throws FileNotFoundException {
@@ -87,6 +87,8 @@ public class DocumentIndex {
      */
     public static int getDocumentLength(int docIdToFind) throws DocumentNotFoundException {
         DocumentInfo documentInfo = index.get(docIdToFind);
+        if(numEntries == 0)
+            numEntries = CollectionStatistics.getCollectionSize();
         if (documentInfo == null) {
             long low = 0;
             long high = numEntries;
@@ -123,5 +125,9 @@ public class DocumentIndex {
         } else {
             return documentInfo.getDocLen();
         }
+    }
+
+    public static String getDocno(int docid) {
+        return index.get(docid).getPid();
     }
 }

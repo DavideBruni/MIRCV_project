@@ -11,16 +11,10 @@ import java.nio.file.attribute.BasicFileAttributes;
 
 public class StreamHelper {
     public static void writeInt(FileOutputStream fos, int integer) throws IOException {
-        if(integer < Math.pow(2,24) - 1){
-            fos.write(0);
-        }
-        if (integer < Math.pow(2,16) - 1) {
-            fos.write(0);
-        }
-        if (integer < Math.pow(2,8) - 1) {
-            fos.write(0);
-        }
-        fos.write(integer);
+        fos.write((integer >> 24) & 0xFF);
+        fos.write((integer >> 16) & 0xFF);
+        fos.write((integer >> 8) & 0xFF);
+        fos.write(integer & 0xFF);
     }
 
     public static void createDir(String Path){

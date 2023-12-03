@@ -32,7 +32,6 @@ public class IndexingMain {
         Configuration.setCOMPRESSED(Boolean.parseBoolean(args[2]));
         Path filePath = Path.of(args[0]);
         boolean parse = Boolean.parseBoolean(args[1]);
-        Configuration.setUpPaths("data");
 
         // Read from compressed file and automatic handle file closure
         try (FileInputStream fis = new FileInputStream(filePath.toFile());

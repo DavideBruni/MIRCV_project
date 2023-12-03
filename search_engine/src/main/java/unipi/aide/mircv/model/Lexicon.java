@@ -14,7 +14,7 @@ import java.util.function.Function;
 public class Lexicon {
 
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
-    private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
+    private static int NUM_FILE_WRITTEN = 14;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
     private static final int LEXICON_CACHE_CAPACITY = 1000;
 

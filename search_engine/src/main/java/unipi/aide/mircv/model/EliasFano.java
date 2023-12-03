@@ -15,30 +15,26 @@ public class EliasFano {
         int n = postingList.size();
         int l = (int) Math.ceil(Math.log(U/n)/Math.log(2));
         int sizeHighBits = ((int) Math.ceil(Math.log(U)/Math.log(2))) - l;
-        int numHighBits = (int) Math.pow(2, sizeHighBits);
-        List<BitSet> lowbits = new ArrayList<>();
+        int numHighBits = sizeHighBits == 0 ? 0 : (int) Math.pow(2, sizeHighBits);
+        List<Integer> lowbitsList = new ArrayList<>();
 
         int clusters [] = new int[numHighBits];
         List<BitSet> highbits = new ArrayList();
-
         for(Posting posting : postingList){
-            BitSet lowBitsSet = new BitSet(l);
-            for (int i = 0; i < l; i++) {
-                boolean bit = ((posting.docid >> i) & 1) == 1;
-                lowBitsSet.set(i, bit);
-            }
-            lowbits.add(lowBitsSet);
+            int mask = (1 << l) - 1;
+            int lowbits = posting.docid & mask;
+            lowbitsList.add(lowbits);
 
             // high bits: set clusters
-            int tmp = (int) (posting.docid >> l);
-            clusters[tmp]++;
-
+            int tmp = posting.docid >> l;
+            if (sizeHighBits > 0) {
+                clusters[tmp]++;
+            }
         }
         // high bits: Unary code
         highbits = UnaryCompressor.compress(clusters);
 
-
-        return new EliasFanoCompressedList(highbits,lowbits,l);
+        return new EliasFanoCompressedList(highbits,lowbitsList,l);
 
     }
 
@@ -48,21 +44,29 @@ public class EliasFano {
         docStream.skipNBytes(docIdOffset);
         docStream.readNBytes(integer_buffer,0,Integer.BYTES);       // leggo l'intero
         int highBitsLen = byteArrayToInt(integer_buffer);                     // lo convergo
-        int[] clusters = new int[highBitsLen];                          // creo un array che contiene i cluster
+        int[] clusters = new int[highBitsLen]; // creo un array che contiene i cluster
         for(int i = 0; i<highBitsLen; i++){
             clusters[i] = UnaryCompressor.readNumber(docStream);
         }
 
         int numBitPerLowBits = byteArrayToInt(docStream.readNBytes(Integer.BYTES));
-        for(int i = 0; i<highBitsLen; i++){
-            for(int j = 0; j<clusters[i]; j++){
-                int byteWritten = numBitPerLowBits == 1 ? 1 : (int)(Math.ceil((Math.log(numBitPerLowBits)/Math.log(2))/8));
-                byte[] lowBits = new byte[0];
-                if(byteWritten > 0){
-                    lowBits = docStream.readNBytes(byteWritten);
+        int byteWritten = numBitPerLowBits < 2 ? numBitPerLowBits : (int)(Math.ceil((double) numBitPerLowBits/8));
+        if(highBitsLen > 0) {
+            for (int i = 0; i < highBitsLen; i++) {
+                for (int j = 0; j < clusters[i]; j++) {
+                    byte[] lowBits = new byte[0];
+                    if (byteWritten > 0) {
+                        lowBits = docStream.readNBytes(byteWritten);
+                    }
+                    docIds.add(decompressNumber(i, lowBits, numBitPerLowBits));
                 }
-                docIds.add(decompressNumber(i,lowBits,numBitPerLowBits));
             }
+        }else{
+            byte[] lowBits = new byte[0];
+            if (byteWritten > 0) {
+                lowBits = docStream.readNBytes(byteWritten);
+            }
+            docIds.add(decompressNumber(0, lowBits, numBitPerLowBits));
         }
 
         return docIds;
@@ -88,7 +92,6 @@ public class EliasFano {
         for (int i = 0; i < 4; i++) {
             result = (result << 8) | (bytesToConvert[i] & 0xFF);
         }
-
         return result;
     }
 

@@ -53,7 +53,7 @@ public class UnaryCompressor {
         int number = 0;
         while(true){
             byte[] buffer = docStream.readNBytes(1);
-            int bitsSet = Integer.bitCount(buffer[0]);
+            int bitsSet = Integer.bitCount(buffer[0] & 0xFF);
             if (bitsSet == 0)
                 return number;
             number +=bitsSet;

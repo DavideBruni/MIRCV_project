@@ -95,6 +95,7 @@ public class Parser {
     // This method filters out stopwords from a list of tokens.
     static List<String> stopwords_filtering(List<String> tokens) {
         //customLogger.info("Performing stopwords filtering");
+        // moveOut
         if(stopwords == null){
             try (Stream<String> lines = Files.lines(Paths.get(STOPWORDS_STRING_PATH))) {
                 stopwords = lines.collect(Collectors.toList());
