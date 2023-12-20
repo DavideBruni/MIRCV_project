@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.util.logging.*;
 
 public class CustomLogger{
-    private static Logger logger;
+    private static final Logger logger;
 
     static {
         // logger configuration
@@ -17,10 +17,10 @@ public class CustomLogger{
         ConsoleHandler consoleHandler = new ConsoleHandler();
         consoleHandler.setLevel(Level.ALL);
         consoleHandler.setFormatter(new SimpleFormatter() {
-            private final String format = "[%1$tF %1$tT] -- %2$-7s -- %3$s %n";
 
             @Override
             public synchronized String format(LogRecord lr) {
+                String format = "[%1$tF %1$tT] -- %2$-7s -- %3$s %n";
                 return String.format(format,
                         new java.util.Date(lr.getMillis()),
                         lr.getLevel().getName(), // Get log level

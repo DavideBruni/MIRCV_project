@@ -7,6 +7,11 @@ import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,13 +19,13 @@ import java.util.Map;
 public class DocumentIndex {
 
     private static final String FILE_NAME = "documentIndex.dat";
-    private static DataOutputStream dataOutputStream;
+    private static FileChannel stream;
     private static final int ENTRY_SIZE = 12;
     private static int numEntries;
     private static Map<Integer,DocumentInfo> index = new HashMap<>(9200000,0.97f);
 
-    private static void initializeOutputStream() throws FileNotFoundException {
-        dataOutputStream = new DataOutputStream(new FileOutputStream(Configuration.getDocumentIndexPath()+FILE_NAME, true));
+    private static void initializeOutputStream() throws IOException {
+        stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath() + FILE_NAME), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
     }
 
 
@@ -34,13 +39,15 @@ public class DocumentIndex {
     public static void add(int docid, String docno, int docLen) throws UnableToAddDocumentIndexException {
         StreamHelper.createDir(Configuration.getDocumentIndexPath());
         try {
-            if(dataOutputStream == null)
+            ByteBuffer buffer = ByteBuffer.allocateDirect(12);
+            if(stream == null)
                 initializeOutputStream();
             // Write docno as integer, then treated as a string, because in our collection pid are integers, save space by storing as Integers
-            dataOutputStream.writeInt(Integer.parseInt(docno));
-            dataOutputStream.writeInt(docid);
-            dataOutputStream.writeInt(docLen);
-
+            buffer.putInt(Integer.parseInt(docno));
+            buffer.putInt(docid);
+            buffer.putInt(docLen);
+            buffer.flip();
+            stream.write(buffer);
         } catch (IOException e) {
             CustomLogger.error("Unable to write to document index file.");
             throw new UnableToAddDocumentIndexException("Unable to write to document index file.");
@@ -49,12 +56,10 @@ public class DocumentIndex {
 
     public static void closeStreams(){
         try{
-            dataOutputStream.close();
+            stream.close();
         }catch (IOException e) {
             CustomLogger.error("Error while closing DocumentIndexOutputStream");
-        }catch (NullPointerException ne){
-
-        }
+        }catch (NullPointerException ne){}
     }
 
 
@@ -94,16 +99,19 @@ public class DocumentIndex {
             long high = numEntries;
             long mid;
 
-            try (RandomAccessFile file = new RandomAccessFile(Configuration.getDocumentIndexPath()+FILE_NAME, "r")) {
+            try (FileChannel file = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath()+FILE_NAME), StandardOpenOption.READ)) {
                 while (low <= high) {
                     mid = (low + high) >>> 1;
 
-                    file.seek(mid * ENTRY_SIZE);       // position at mid-file (or mid "partition" if it's not the first iteration)
+                    file.position(mid * ENTRY_SIZE);       // position at mid-file (or mid "partition" if it's not the first iteration)
 
                     // read the record and parse it to string
-                    String docno = String.valueOf(file.readInt());
-                    int docId = file.readInt();
-                    int documentLength = file.readInt();
+                    ByteBuffer buffer = ByteBuffer.allocateDirect(12);
+                    file.read(buffer);
+                    buffer.flip();
+                    String docno = String.valueOf(buffer.getInt());
+                    int docId = buffer.getInt();
+                    int documentLength = buffer.getInt();
                     documentInfo = new DocumentInfo(docno, docId, documentLength);
                     if (!index.containsKey(docId))
                         index.put(docId, documentInfo);

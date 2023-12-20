@@ -1,6 +1,8 @@
 package unipi.aide.mircv.model;
 
-public  class Posting{
+import java.io.Serializable;
+
+public  class Posting implements Serializable {
     int docid;
     int frequency;
 

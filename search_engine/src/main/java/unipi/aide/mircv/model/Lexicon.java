@@ -7,16 +7,23 @@ import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.function.Function;
 
-public class Lexicon {
+public class Lexicon implements Serializable{
 
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
-    private static int NUM_FILE_WRITTEN = 14;        // needed to know how many lexicon retrieve in merge operation
+    private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
     private static final int LEXICON_CACHE_CAPACITY = 1000;
+
+    private LinkedHashMap<String,LexiconEntry> lexiconCache;
 
     // singleton pattern
     private static Lexicon instance;
@@ -29,15 +36,16 @@ public class Lexicon {
 
     private Lexicon(){
         entries = new TreeMap<>();
+        lexiconCache  = new LinkedHashMap<>(LEXICON_CACHE_CAPACITY, 0.8f, true){
+            protected boolean removeEldestEntry(Map.Entry<String, LexiconEntry> eldest)
+            {
+                return size() > LEXICON_CACHE_CAPACITY;
+            }
+        };
     }
 
 
-    private LinkedHashMap<String,LexiconEntry> lexiconCache = new LinkedHashMap<>(LEXICON_CACHE_CAPACITY, 0.8f, true){
-        protected boolean removeEldestEntry(Map.Entry<String, LexiconEntry> eldest)
-        {
-            return size() > LEXICON_CACHE_CAPACITY;
-        }
-    };
+
 
     /**
      * Retrieves the first set of tokens from the specified array of partial lexicon streams.
@@ -46,7 +54,7 @@ public class Lexicon {
      * @return An array of strings containing the first set of tokens from the partial lexicon streams.
      * @throws PartialLexiconNotFoundException If an IOException occurs while reading from the input streams.
      */
-    public static String[] getFirstTokens(DataInputStream[] partialLexiconStreams) throws PartialLexiconNotFoundException {
+    public static String[] getFirstTokens(FileChannel[] partialLexiconStreams) throws PartialLexiconNotFoundException {
         return getTokens(new String[NUM_FILE_WRITTEN],partialLexiconStreams);
     }
 
@@ -61,17 +69,27 @@ public class Lexicon {
      * @return The array of strings containing lexicon tokens, with updated values from the partial lexicon streams.
      * @throws PartialLexiconNotFoundException If an IOException occurs while reading from any of the input streams.
      */
-    public static String[] getTokens(String[] tokens, DataInputStream[] partialLexiconStreams) throws PartialLexiconNotFoundException {
+    public static String[] getTokens(String[] tokens, FileChannel[] partialLexiconStreams) throws PartialLexiconNotFoundException {
         for(int i =0; i< tokens.length; i++){
-            if (tokens[i] == null && partialLexiconStreams[i] != null){
-                try {
-                    tokens[i] = partialLexiconStreams[i].readUTF();
-                } catch(EOFException e){
-                    tokens[i] = null;
-                } catch (IOException e) {
-                    throw new PartialLexiconNotFoundException(e.getMessage());
-                }
+            try {
+                if (tokens[i] == null && partialLexiconStreams[i].size() != partialLexiconStreams[i].position()){
+                    try {
+                        ByteBuffer tmp = ByteBuffer.allocateDirect(45);
+                        int len = partialLexiconStreams[i].read(tmp);
+                        tmp.flip();
+                        byte[] byteBuffer = new byte[45];
+                        tmp.get(byteBuffer);        // da errore, bufferunderFlowException, cerchiamo di capire i perchè, ma nemmeno sempre
+                        tokens[i] = new String(byteBuffer, 0, len);
+                        tokens[i] = tokens[i].trim();
+                    }catch(EOFException e){
+                        tokens[i] = null;
+                    } catch (IOException e) {
+                        throw new PartialLexiconNotFoundException(e.getMessage());
+                    }
 
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
         }
         return tokens;
@@ -82,13 +100,15 @@ public class Lexicon {
      *
      * @return An array of {@code DataInputStream} objects representing lexicon partition streams.
      */
-    public static DataInputStream[] getStreams() {
-        DataInputStream[] dataInputStreams = new DataInputStream[NUM_FILE_WRITTEN];
+    public static FileChannel[] getStreams() {
+        FileChannel[] dataInputStreams = new FileChannel[NUM_FILE_WRITTEN];
         for(int i=0; i<NUM_FILE_WRITTEN; i++){
             try {
-                dataInputStreams[i] = new DataInputStream(new FileInputStream(Configuration.getRootDirectory()+TEMP_DIR + "/part" + i + ".dat"));
+                dataInputStreams[i] = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory()+TEMP_DIR + "/part" + i + ".dat"));
             } catch (FileNotFoundException e) {
                 CustomLogger.info("Unable to open stream for partition "+i+": partition lost, moving on");
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
         }
         return dataInputStreams;
@@ -101,22 +121,23 @@ public class Lexicon {
      * @param partialLexiconStream The DataInputStream representing the partial lexicon stream.
      * @return A LexiconEntry object with fields populated from the input stream, or null if the end of the stream is reached.
      */
-    public static LexiconEntry readEntry(DataInputStream partialLexiconStream) {
+    public static LexiconEntry readEntry(FileChannel partialLexiconStream) {
         // we already read the token stored, we have to read the remaning part of the LexiconEntry
         LexiconEntry lexiconEntry = new LexiconEntry();
         try {
-            lexiconEntry.setDf(partialLexiconStream.readInt());
-            lexiconEntry.setIdf(partialLexiconStream.readDouble());
-            lexiconEntry.setDocIdOffset(partialLexiconStream.readInt());
-            lexiconEntry.setFrequencyOffset(partialLexiconStream.readInt());
-            lexiconEntry.setNumBlocks(partialLexiconStream.readInt());
-            lexiconEntry.setPostingNumber(partialLexiconStream.readInt());
-            lexiconEntry.setSkipPointerOffset(partialLexiconStream.readInt());
-            lexiconEntry.setTermUpperBound(partialLexiconStream.readDouble());
+            ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension());
+            partialLexiconStream.read(buffer);
+            buffer.flip();
+            lexiconEntry.setDf(buffer.getInt());
+            lexiconEntry.setIdf(buffer.getDouble());
+            lexiconEntry.setDocIdOffset(buffer.getInt());
+            lexiconEntry.setFrequencyOffset(buffer.getInt());
+            lexiconEntry.setTermUpperBounds(buffer.getDouble(),buffer.getDouble());
+            lexiconEntry.setMaxId(buffer.getInt());
         } catch (EOFException eof){
             lexiconEntry = null;
         } catch (IOException e) {
-            CustomLogger.error("Error while reading LexiconEntry: "+e.getMessage());
+            CustomLogger.error("Error while reading LexiconEntry: " + e.getMessage());
             lexiconEntry = null;
         }
         return lexiconEntry;
@@ -125,7 +146,7 @@ public class Lexicon {
 
     /**
      * Retrieves the value of a specific entry identified by the given term using the provided value extractor function.
-     * This method first attempts to retrieve the LexiconEntry associated with the term using the {@link #getEntry(String,boolean)} method.
+     * This method first attempts to retrieve the LexiconEntry associated with the term using the {@link #getEntry(String)} method.
      * If a LexiconEntry is found, the value extractor function is applied to obtain the desired value.
      *
      * @param term           The term for which to retrieve the entry value.
@@ -134,7 +155,7 @@ public class Lexicon {
      * @return The extracted value of the entry, or null if the entry is not found.
      */
     public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        LexiconEntry lexiconEntry = getEntry(term,false);
+        LexiconEntry lexiconEntry = getEntry(term);
         if (lexiconEntry!= null)
             return valueExtractor.apply(lexiconEntry);
         return null;
@@ -151,14 +172,14 @@ public class Lexicon {
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      * @see #getEntryFromDisk(String)
      */
-    public static LexiconEntry getEntry(String token,boolean cache) {
+    public static LexiconEntry getEntry(String token) {
         LexiconEntry res = instance.lexiconCache.get(token);
         if (res == null) {
             if (instance.entries != null)
                 res = instance.entries.get(token);
             if (res == null) {
                 res = getEntryFromDisk(token);
-                if(cache){
+                if(Configuration.getCache()){
                     instance.lexiconCache.put(token,res);
                 }else {
                     instance.add(token, res);
@@ -175,27 +196,30 @@ public class Lexicon {
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      */
     private static LexiconEntry getEntryFromDisk(String targetToken) {
-        int entrySize = (CollectionStatistics.getLongestTermLength() + 40);
+        int entrySize = (CollectionStatistics.getLongestTermLength() + LexiconEntry.getEntryDimension());
         long low = 0;
         long high = CollectionStatistics.getNumberOfTokens();
         long mid;
 
-        try(RandomAccessFile file = new RandomAccessFile(Configuration.getLexiconPath(), "r")){
+        try(FileChannel stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getLexiconPath()), StandardOpenOption.READ)){
             while (low <= high) {
                 mid = (low + high) >>> 1;
 
-                file.seek(mid*entrySize);       // position at mid-file (or mid "partition" if it's not the first iteration)
+                stream.position(mid*entrySize); // position at mid-file (or mid "partition" if it's not the first iteration)
 
                 // read the record and parse it to string
-                byte[] recordBytes = new byte[CollectionStatistics.getLongestTermLength()];
-                file.read(recordBytes);
-                String currentToken = new String(recordBytes, StandardCharsets.UTF_8).trim();
+                ByteBuffer recordBytes = ByteBuffer.allocateDirect(CollectionStatistics.getLongestTermLength());
+                stream.read(recordBytes);
+                String currentToken = new String(recordBytes.array(), StandardCharsets.UTF_8).trim();
 
                 int compareResult = currentToken.compareTo(targetToken);
 
                 if (compareResult == 0) {       //find the entry
-                    return new LexiconEntry(file.readInt(), file.readDouble(), file.readInt(),
-                            file.readInt(), file.readInt(), file.readInt(), file.readInt(), file.readDouble());
+                    ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension());
+                    stream.read(buffer);
+                    buffer.flip();
+                    return new LexiconEntry(buffer.getInt(), buffer.getDouble(), buffer.getInt(),
+                            buffer.getInt(), buffer.getDouble(), buffer.getDouble(),buffer.getInt());
                 } else if (compareResult < 0) {     // current entry is lower than target one
                     low = mid + 1;
                 } else {                // current entry is greater than target one
@@ -211,7 +235,7 @@ public class Lexicon {
     }
 
 
-    public void updateDfAndNumberOfPosting(String token) {
+    public void updateDf(String token) {
         LexiconEntry lexiconEntry= entries.get(token);
         if(lexiconEntry == null){
             lexiconEntry = new LexiconEntry();
@@ -219,7 +243,6 @@ public class Lexicon {
         }else {
             lexiconEntry.updateDF();
         }
-        lexiconEntry.updateNumberOfPostings(1);
     }
 
     public static void setEntry(String token, LexiconEntry lexiconEntry){
@@ -247,22 +270,23 @@ public class Lexicon {
             filename = Configuration.getRootDirectory()+TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
         File file = new File(filename);
-        try (DataOutputStream dataOutputStream = new DataOutputStream(new FileOutputStream(file,true))) {
+        try(FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
+                StandardOpenOption.APPEND,
+                StandardOpenOption.CREATE)){
+            ByteBuffer buffer = ByteBuffer.allocateDirect(45+LexiconEntry.getEntryDimension());
             for (String key : instance.entries.keySet()) {
-                if(is_merged)
-                    dataOutputStream.write(stringToArrayByteFixedDim(key,CollectionStatistics.getLongestTermLength()));
-                else
-                    dataOutputStream.writeUTF(key);
+                buffer.clear();
+                buffer.put(stringToArrayByteFixedDim(key,45));
                 LexiconEntry tmp = instance.entries.get(key);
-                dataOutputStream.writeInt(tmp.getDf());
-                dataOutputStream.writeDouble(tmp.getIdf());
-                dataOutputStream.writeInt(tmp.getDocIdOffset());
-                dataOutputStream.writeInt(tmp.getFrequencyOffset());
-                dataOutputStream.writeInt(tmp.getNumBlocks());
-                dataOutputStream.writeInt(tmp.getPostingNumber());
-                dataOutputStream.writeInt(tmp.getSkipPointerOffset());
-                dataOutputStream.writeDouble(tmp.getTermUpperBound());
-                CollectionStatistics.setLongestTerm(key.length());
+                buffer.putInt(tmp.getDf());
+                buffer.putDouble(tmp.getIdf());
+                buffer.putInt(tmp.getDocIdOffset());
+                buffer.putInt(tmp.getFrequencyOffset());
+                buffer.putDouble(tmp.getBM25_termUpperBound());
+                buffer.putDouble(tmp.getTFIDF_termUpperBound());
+                buffer.putInt(tmp.getMaxDocId());
+                buffer.flip();
+                stream.write(buffer);
             }
             if (!is_merged)
                 NUM_FILE_WRITTEN++;
@@ -284,7 +308,7 @@ public class Lexicon {
         }
     }
 
-    private static byte[] stringToArrayByteFixedDim(String key, int length) {
+    static byte[] stringToArrayByteFixedDim(String key, int length) {
         byte[] byteArray = new byte[length];
         byte[] inputBytes = key.getBytes(StandardCharsets.UTF_8);
 
@@ -316,4 +340,11 @@ public class Lexicon {
                 '}';
     }
 
+    public static LinkedHashMap<String, LexiconEntry> getLexiconCache() {
+        return instance.lexiconCache;
+    }
+
+    public static void setLexiconCache(LinkedHashMap<String, LexiconEntry> lexiconCache) {
+        instance.lexiconCache.putAll(lexiconCache);
+    }
 }

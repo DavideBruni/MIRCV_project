@@ -31,28 +31,29 @@ public class Scorer {
         return (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
     }
 
-    /**
-     * Calculates the upper bound of BM25 scores for a term in a posting list and set it in provided LexiconEntry.
-     *
-     * @param postingList   The posting list containing the term occurrences.
-     * @param lexiconEntry  The LexiconEntry corresponding to the term.
-     */
-    public static void BM25_termUpperBound(List<Posting> postingList, LexiconEntry lexiconEntry){
-        double maxScore = 0.0;
-        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
-        double idf = lexiconEntry.getIdf();
+    public static double TFIDF_singleTermDocumentScore(int tf, double idf) {
+        return (1+ Math.log(tf))*idf;
+    }
 
-        for(Posting posting : postingList){
-            int tf = posting.getFrequency();
+    public static double[] calculateTermUpperBounds(PostingList postingList, double idf){
+        double BM25_maxScore = 0.0;
+        double TFIDF_maxScore = 0.0;
+        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
+        List<Integer> docIds = postingList.getDocIds();
+        List<Integer> frequencies = postingList.getFrequencies();
+        for(int i = 0; i<docIds.size(); i++){
+            int tf = frequencies.get(i);
             try {
-                int documentLength = DocumentIndex.getDocumentLength(posting.getDocid());
-                double score = (tf / (NORMALIZATION_PARAMETER_K1*(NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
-                maxScore = Math.max(maxScore, score);
+                int documentLength = DocumentIndex.getDocumentLength(docIds.get(i));
+                double BM25_score = (tf / (NORMALIZATION_PARAMETER_K1*(NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
+                double TFIDF_score = (1+Math.log(tf))*idf;
+                BM25_maxScore = Math.max(BM25_maxScore, BM25_score);
+                TFIDF_maxScore = Math.max(TFIDF_maxScore, TFIDF_score);
             } catch (DocumentNotFoundException e) {
-                CustomLogger.error("Document "+posting.getDocid()+ " not found");
+                CustomLogger.error("Document "+docIds.get(i)+ " not found");
             }
         }
-        lexiconEntry.setTermUpperBound(maxScore);
+        return new double[]{BM25_maxScore,TFIDF_maxScore};
     }
 
 
@@ -66,6 +67,7 @@ public class Scorer {
      * @return A priority queue of DocScorePair objects sorted by descending scores.
      *         The queue contains the documents with the highest scores, limited by the configured minHeapSize.
      */
+    /*
     public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists, boolean conjunctiveQuery) {
         PriorityQueue<DocScorePair> q = new PriorityQueue<>();
         int minHeapSize = Configuration.getMinheapDimension();
@@ -158,6 +160,7 @@ public class Scorer {
     static class DocScorePair implements Comparable, Serializable {
         private int docid;
         private double score;
+        private String pid;
 
         public DocScorePair(int docid, double score) {
             this.docid = docid;
@@ -188,10 +191,13 @@ public class Scorer {
 
         @Override
         public String toString() {
-            return DocumentIndex.getDocno(docid) + "\n";
+            if(pid == null){
+                pid = DocumentIndex.getDocno(docid);
+            }
+            return  pid;
         }
 
 
     }
-
+*/
 }

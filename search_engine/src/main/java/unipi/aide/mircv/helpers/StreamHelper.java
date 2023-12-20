@@ -47,7 +47,7 @@ public class StreamHelper {
 
     private static void deleteFilesInDirectory(Path directory) {
         try {
-            Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
+            Files.walkFileTree(directory, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     Files.delete(file);
@@ -56,7 +56,7 @@ public class StreamHelper {
                 }
 
                 @Override
-                public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+                public FileVisitResult visitFileFailed(Path file, IOException exc){
                     CustomLogger.error("Error while visiting file " + file + ": " + exc.getMessage());
                     return FileVisitResult.CONTINUE;
                 }

@@ -1,99 +1,134 @@
+/*
+ * Copyright 2016-2018 Matteo Catena
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package unipi.aide.mircv.model;
 
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.List;
 
+/**
+ * A simpl(istic) implementation of the EliasFano compression technique. This
+ * class compresses array of MONOTONICALLY INCREASING integers into (smaller)
+ * arrays of bytes. It permits to uncompress an arbitrary element for the
+ * compressed data, without decompressing the whole array. Similarly, it permits
+ * to find the index of the first element in the compressed data, greater or
+ * equal to a given value, without decompressing the whole array.
+ * 
+ * @author Matteo Catena
+ *
+ */
 public class EliasFano {
-    public static EliasFanoCompressedList compress(List<Posting> postingList) {
-        // greatest id to represent, why + 1? If I had as highest number a multiple of 2, it gives as number of bits needed
-        // to repreresent the number one bit less than the necessary, for example if I had to store [15,16] I need 3 bit for lower bits
-        // and 2 for higher bits, without the plus 1, formulas gave me 1 bit for high bits
-        int U = postingList.get(postingList.size() - 1).docid + 1;
-        int n = postingList.size();
-        int l = (int) Math.ceil(Math.log(U/n)/Math.log(2));
-        int sizeHighBits = ((int) Math.ceil(Math.log(U)/Math.log(2))) - l;
-        int numHighBits = sizeHighBits == 0 ? 0 : (int) Math.pow(2, sizeHighBits);
-        List<Integer> lowbitsList = new ArrayList<>();
 
-        int clusters [] = new int[numHighBits];
-        List<BitSet> highbits = new ArrayList();
-        for(Posting posting : postingList){
-            int mask = (1 << l) - 1;
-            int lowbits = posting.docid & mask;
-            lowbitsList.add(lowbits);
+	private EliasFano() {
+		
+	}
+	
+	static long roundUp(long val, final long den) {
 
-            // high bits: set clusters
-            int tmp = posting.docid >> l;
-            if (sizeHighBits > 0) {
-                clusters[tmp]++;
-            }
-        }
-        // high bits: Unary code
-        highbits = UnaryCompressor.compress(clusters);
+		val = val == 0 ? den : val;
+		return (val % den == 0) ? val : val + (den - (val % den));
 
-        return new EliasFanoCompressedList(highbits,lowbitsList,l);
+	}
 
-    }
+	/**
+	 * Returns the number of lower bits required to encode each element in an
+	 * array of size {@code length} with maximum value {@code u}.
+	 * 
+	 * @param u
+	 *            the max value in the array
+	 * @param length
+	 *            the length of the array
+	 * @return the number of lower bits
+	 */
+	public static int getL(final int u, final int length) {
 
-    public static List<Integer> decompress(InputStream docStream, long docIdOffset) throws IOException {
-        List<Integer> docIds = new ArrayList<>();
-        byte[] integer_buffer = new byte[4];
-        docStream.skipNBytes(docIdOffset);
-        docStream.readNBytes(integer_buffer,0,Integer.BYTES);       // leggo l'intero
-        int highBitsLen = byteArrayToInt(integer_buffer);                     // lo convergo
-        int[] clusters = new int[highBitsLen]; // creo un array che contiene i cluster
-        for(int i = 0; i<highBitsLen; i++){
-            clusters[i] = UnaryCompressor.readNumber(docStream);
-        }
+		long x = roundUp(u, length) / length;
+		return Integer.SIZE - Integer.numberOfLeadingZeros((int) (x - 1));
+	}
 
-        int numBitPerLowBits = byteArrayToInt(docStream.readNBytes(Integer.BYTES));
-        int byteWritten = numBitPerLowBits < 2 ? numBitPerLowBits : (int)(Math.ceil((double) numBitPerLowBits/8));
-        if(highBitsLen > 0) {
-            for (int i = 0; i < highBitsLen; i++) {
-                for (int j = 0; j < clusters[i]; j++) {
-                    byte[] lowBits = new byte[0];
-                    if (byteWritten > 0) {
-                        lowBits = docStream.readNBytes(byteWritten);
-                    }
-                    docIds.add(decompressNumber(i, lowBits, numBitPerLowBits));
-                }
-            }
-        }else{
-            byte[] lowBits = new byte[0];
-            if (byteWritten > 0) {
-                lowBits = docStream.readNBytes(byteWritten);
-            }
-            docIds.add(decompressNumber(0, lowBits, numBitPerLowBits));
-        }
+	/**
+	 * Compresses {@code length} elements of {@code in}, from {@code inOffset},
+	 * into the {@code out} array, from {@code outOffset}
+	 * 
+	 * @param in
+	 *            the array to compress (MONOTONICALLY INCREASING)
+	 * @return the compress values
+	 */
+	public static int compress(final List<Integer> in, byte [] out, int l, long[] docIdsOffset, int prev) {
+		for (int i = 0; i < in.size(); i++) {
+			int low = Bits.VAL_TO_WRITE[l] & in.get(i);
+			Bits.writeBinary(out, docIdsOffset[0], low, l);
+			docIdsOffset[0] += l;
+			int high = in.get(i) >>> l;
+			Bits.writeUnary(out, docIdsOffset[1], high - prev);
+			docIdsOffset[1] += (high - prev) + 1;
+			prev = high;
+		}
+		return prev;
+	}
 
-        return docIds;
-    }
+	public static List<Integer> decompress(final byte[] in, final int length, final int maxDocId) {
 
-    private static int decompressNumber(int j, byte[] lowBits, int numBitPerLowBits) {
-        int docId = j << numBitPerLowBits;
-        int lowBitsAsInt = byteArrayToInt(lowBits);
-        docId |= lowBitsAsInt;  // Imposta gli ultimi numeroBit di target con quelli di sorgente
-        return docId;
-    }
+		List<Integer> docIds = new ArrayList<>();
+		long lowBitsOffset = 0;
+		final int l = getL(maxDocId,length);
+		long highBitsOffset = roundUp(lowBitsOffset + (l * length), Byte.SIZE);
 
-    private static int byteArrayToInt(byte[] byteArray) {
-        byte[] bytesToConvert = new byte[Integer.BYTES];
-        if (byteArray.length != 4) {
-            System.arraycopy(byteArray, 0, bytesToConvert, Integer.BYTES - byteArray.length, byteArray.length);
-        }else{
-            bytesToConvert = byteArray;
-        }
+		int delta = 0;
+		for (int i = 0; i < length; i++) {
+			final int low = Bits.readBinary(in, lowBitsOffset, l);
+			final int high = Bits.readUnary(in, highBitsOffset);
+			delta += high;
+			docIds.add((delta << l) | low);
+			lowBitsOffset += l;
+			highBitsOffset += high + 1;
+		}
 
-        // Convert from big-endian to integer
-        int result = 0;
-        for (int i = 0; i < 4; i++) {
-            result = (result << 8) | (bytesToConvert[i] & 0xFF);
-        }
-        return result;
-    }
+		return docIds;
+	}
+	/**
+	 * Returns the number of bytes required to compress an array of size
+	 * {@code length} and maximum value {@code u}.
+	 * 
+	 * @param u
+	 *            the maximum value in the array to compress
+	 * @param length
+	 *            the size of the array to compress
+	 * @return the number of required bytes
+	 */
+	public static int getCompressedSize(final int u, final int length) {
 
+		final int l = getL(u, length);
+		final long numLowBits = roundUp(l * length, Byte.SIZE);
+		final long numHighBits = roundUp(2 * length, Byte.SIZE);
+		return (int) ((numLowBits + numHighBits) / Byte.SIZE);
+	}
 
+	public static int writeToDisk(byte[] compressedDocIds, FileChannel docStream) {
+		ByteBuffer buffer = ByteBuffer.allocateDirect(compressedDocIds.length);
+		buffer.put(compressedDocIds);
+		buffer.flip();
+		int written = 0;
+		try {
+			written = docStream.write(buffer);
+		} catch (IOException e) {
+			throw new RuntimeException(e);
+		}
+		return written;
+	}
 }

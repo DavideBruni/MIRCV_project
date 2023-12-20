@@ -7,17 +7,21 @@ import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.List;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.*;
 
-public class PostingList {
+public class PostingList implements Serializable{
 
     private static final String TEMP_DOC_ID_DIR ="/invertedIndex/temp/docIds";
     private static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
-
-    List<Posting> postingList;
+    private static final String SCORE_STANDARD = Configuration.getScoreStandard();
+    List<Integer> docIds;
+    List<Integer> frequencies;
     // score
     String term;
     int currentDocIdIndex;
@@ -27,19 +31,20 @@ public class PostingList {
 
     // constructors
 
-    public PostingList(List<Posting> postingList,String term) {
+    /*public PostingList(List<Posting> postingList,String term) {
         this.term = term;
         this.postingList = postingList;
         currentDocIdIndex = -1;
         inMemory = true;
     }
-
+*/
     public PostingList() {
-        postingList = new ArrayList<>();
+        docIds = new ArrayList<>();
+        frequencies = new ArrayList<>();
         currentDocIdIndex = -1;
         inMemory = true;
     }
-
+/*
     public PostingList(String term){
         postingList = new ArrayList<>();
         currentDocIdIndex = -1;
@@ -52,8 +57,27 @@ public class PostingList {
         currentDocIdIndex = -1;
         this.inMemory = inMemory;
         this.term = term;
+    }*/
+
+    public PostingList(int[] docIdsArray, int[] freqArray, String token) {
+        docIds = new ArrayList<>();
+        for(int docId : docIdsArray)
+            docIds.add(docId);
+        frequencies = new ArrayList<>();
+        for(int freq : freqArray)
+            frequencies.add(freq);
+        term = token;
     }
 
+    public PostingList(List<Integer> docIds, List<Integer> frequencies, String term) {
+        this.docIds = docIds;
+        this.frequencies = frequencies;
+        this.term = term;
+    }
+
+    /*public int getSize(){
+        return postingList.size();
+    }*/
 
     /**
      * Reads a PostingList from disk for a specified token and partition.
@@ -66,37 +90,40 @@ public class PostingList {
      * @param compressed       A boolean indicating whether the data is compressed.
      * @return A PostingList object.
      */
-    public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int numberOfPosting, boolean compressed) throws FileNotFoundException {
+    public PostingList readFromDisk(String token, int partition, int docIdOffset, int frequencyOffset, int numberOfPosting, int maxDocId, boolean compressed) throws FileNotFoundException {
         PostingList res = null;
-        try (FileInputStream docStream = new FileInputStream(Configuration.getRootDirectory()+TEMP_DOC_ID_DIR + "/part"+partition+".dat");
-             FileInputStream freqStream = new FileInputStream(Configuration.getRootDirectory()+TEMP_FREQ_DIR + "/part" + partition+".dat")){
-            res = new PostingList(token);
+        try(FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory()+TEMP_DOC_ID_DIR + "/part"+partition+".dat"),
+                                                                        StandardOpenOption.READ);
+            FileChannel freqStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory()+TEMP_FREQ_DIR + "/part" + partition+".dat"),
+                                                                        StandardOpenOption.READ))
+        {
+            docStream.position(docIdOffset);
+            freqStream.position(frequencyOffset);
             if (!compressed) {
-                DataInputStream dis_docStream = new DataInputStream(docStream);
-                DataInputStream dis_freqStream = new DataInputStream(freqStream);
-                dis_docStream.skipBytes(docIdOffset);
-                dis_freqStream.skipBytes(frequencyOffset);
-                for (int i = 0; i <numberOfPosting; i++) {
-                    try {
-                        // currently reading from two different streams (files)
-                        int docId = dis_docStream.readInt();
-                        int frq = dis_freqStream.readInt();
-                        res.add(new Posting(docId,frq));        //add the Posting to the postingList
-                    } catch (EOFException eof) {
-                        break;                                  //there are no more postings
-                    }
-                }
-                dis_docStream.close();
-                dis_freqStream.close();
+                ByteBuffer bufferDocIds = ByteBuffer.allocateDirect(4*numberOfPosting);
+                ByteBuffer bufferFrequencies = ByteBuffer.allocateDirect(4*numberOfPosting);
+                docStream.read(bufferDocIds);
+                freqStream.read(bufferFrequencies);
+                bufferDocIds.flip();
+                bufferFrequencies.flip();
+                int [] docIdsArray = new int[numberOfPosting];
+                bufferDocIds.asIntBuffer().get(docIdsArray);
+                int [] freqArray = new int[numberOfPosting];
+                bufferFrequencies.asIntBuffer().get(freqArray);
+
+                res = new PostingList(docIdsArray,freqArray,token);
+
             }else{
                 // reading docIds first, then frequencies and storing them in separate lists (however they are linked by the index in the list)
-                List<Integer> docIds = EliasFano.decompress(docStream, docIdOffset);
-                List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream,frequencyOffset,docIds.size());
+                ByteBuffer bufferDocIds = ByteBuffer.allocateDirect(EliasFano.getCompressedSize(maxDocId,numberOfPosting));
+                int len = docStream.read(bufferDocIds);
+                bufferDocIds.flip();
+                byte [] buffer = new byte[len];
+                bufferDocIds.get(buffer);
+                List<Integer> documentIds = EliasFano.decompress(buffer, numberOfPosting,maxDocId);
+                List<Integer> freqs = UnaryCompressor.readFrequencies(freqStream,frequencyOffset,numberOfPosting);
+                res = new PostingList(documentIds,freqs,token);
 
-                // now for each pair docId - frequency I create a Posting and add it to the postinglist
-                for(int i = 0; i<docIds.size(); i++){
-                    res.add(new Posting(docIds.get(i),frequency.get(i)));
-                }
             }
 
         } catch (IOException e) {
@@ -107,12 +134,13 @@ public class PostingList {
 
     /**
      * Retrieves the current document ID from the PostingList.
-     * If the PostingList has never been used (initialized), this method calls {@link #next()} to set the initial state.
-     * If the PostingList is not stored in memory or if an IOException is thrown from {@link #next()}, it returns {@link Integer#MAX_VALUE}.
+     * If the PostingList has never been used (initialized), this method calls {@link #//next()} to set the initial state.
+     * If the PostingList is not stored in memory or if an IOException is thrown from {@link #//next()}, it returns {@link Integer#MAX_VALUE}.
      * Otherwise, it returns the document ID at the current index in the PostingList.
      *
      * @return The current document ID from the PostingList.
      */
+    /*
     public int docId() {
         if(currentDocIdIndex == -1){        //this postingList never used
             try {
@@ -126,11 +154,12 @@ public class PostingList {
         }
         return postingList.get(currentDocIdIndex).docid;
     }
-
-    public void add(Posting posting) {
-        postingList.add(posting);
+*/
+    public void add(int docId, int frequency) {
+        docIds.add(docId);
+        frequencies.add(frequency);
     }
-
+/*
     public List<Posting> getPostingList() {
         return postingList;
     }
@@ -141,15 +170,20 @@ public class PostingList {
             if(idf < 0){
                 idf = Lexicon.getEntryValue(term,LexiconEntry::getIdf);
             }
-            return Scorer.BM25_singleTermDocumentScore(posting.frequency,posting.docid,idf);
+            if(SCORE_STANDARD.equals("BM25"))
+                return Scorer.BM25_singleTermDocumentScore(posting.frequency,posting.docid,idf);
+            else {
+                return Scorer.TFIDF_singleTermDocumentScore(posting.frequency,idf);
+            }
         } catch (DocumentNotFoundException | ArithmeticException | IndexOutOfBoundsException e ) {
             return 0;
         }
     }
-
+*/
     /**
      * Advances to the next document in the PostingList, updating the internal state.
      */
+    /*
     public void next() throws IOException {
         /*
         * if PostingList is not in RAM and I don't already read all the blocks
@@ -157,6 +191,7 @@ public class PostingList {
         *
         * If it's written in this way to exploit how the condition are interpreted
         * */
+            /*
         Integer numBlock = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
         if (null == numBlock){
             inMemory = false;
@@ -167,7 +202,7 @@ public class PostingList {
             int docIdOffset;
             int frequencyOffset;
             if(numBlock == 1){    //check if it's divided in blocks or not
-                LexiconEntry lexiconEntry = Lexicon.getEntry(term,false);
+                LexiconEntry lexiconEntry = Lexicon.getEntry(term);
                 docIdOffset = lexiconEntry.getDocIdOffset();
                 frequencyOffset = lexiconEntry.getFrequencyOffset();
                 numBlockRead++;
@@ -215,7 +250,7 @@ public class PostingList {
                 dis_docStream.close();
                 dis_freqStream.close();
             }else{
-                List<Integer> docIds = EliasFano.decompress(docStream, docIdOffset);
+                List<Integer> docIds = new ArrayList<>();//EliasFano.decompress(docStream, docIdOffset);
                 List<Integer> frequency = UnaryCompressor.readFrequencies(freqStream, frequencyOffset,postingNumber);
                 int len = docIds.size();
                 for(int i = 0; i<len; i++){
@@ -227,15 +262,10 @@ public class PostingList {
         return res;
     }
 
+             */
 
-    /**
-     * Advances the current document index to the next document ID greater than or equal to the specified docId.
-     * This method efficiently navigates through the PostingList, whether it's in memory or stored on disk in blocks.
-     * If the desired docId is found in the current in-memory PostingList, the currentDocIdIndex is updated accordingly.
-     * If the PostingList is not in memory or the docId is not found, it attempts to read the necessary blocks from disk.
-     *
-     * @param docId The target document ID to seek in the PostingList.
-     */
+
+    /*
     public void nextGEQ(int docId){
         Integer numBlocks = Lexicon.getEntryValue(term,LexiconEntry::getNumBlocks);
 
@@ -254,11 +284,12 @@ public class PostingList {
              *
              * If it's written in this way to exploit how the condition are interpreted
              * */
+    /*
             try {
                 int docIdOffset;
                 int frequencyOffset;
                 if(numBlocks == 1){    //check if it's divided in blocks or not
-                    LexiconEntry lexiconEntry = Lexicon.getEntry(term,false);
+                    LexiconEntry lexiconEntry = Lexicon.getEntry(term);
                     docIdOffset = lexiconEntry.getDocIdOffset();
                     frequencyOffset = lexiconEntry.getFrequencyOffset();
                     numBlockRead++;
@@ -292,200 +323,63 @@ public class PostingList {
     }
 
     public double getTermUpperBound() {
-        return Lexicon.getEntryValue(term,LexiconEntry::getTermUpperBound);
+        return Lexicon.getEntryValue(term,LexiconEntry::getBM25_termUpperBound);
     }
 
     public String getToken() { return term; }
 
 
 
-
-    /**
-     * Writes the posting lists to the specified output streams without compression.
-     *
-     * @param docIdStream     The output stream for document IDs.
-     * @param frequencyStream The output stream for frequencies.
-     * @param offset          The initial offset for output streams.
-     * @param is_merged        Indicates whether the posting lists have been merged for potential skip pointers.
-     * @return The final offset after writing the uncompressed data, representing the number of postings written.
-     */
-    public int writeToDiskNotCompressed(DataOutputStream docIdStream, DataOutputStream frequencyStream, int offset, boolean is_merged, LexiconEntry lexiconEntry) throws IOException {
-        // check posting list dimension (if is the final one) to eventually create skipping-pointers
-        if (is_merged && (postingList.size() * 8 > POSTING_SIZE_THRESHOLD)){
-            //customLogger.info("Generating skipping pointers");
-            addSkipPointers(lexiconEntry,offset);       // we can create them directly, we have fixed dimension for docIds and frequencies
-            Lexicon.setEntry(term,lexiconEntry);
-        }
-        for (Posting posting : postingList) {              //for each posting in postingList
-            docIdStream.writeInt(posting.docid);           // writing docId
-            frequencyStream.writeInt(posting.frequency);    // writing frequency
+*/
+    public int writeToDiskNotCompressed(FileChannel docIdStream, FileChannel frequencyStream, int offset) throws IOException {
+        ByteBuffer idBuffer = ByteBuffer.allocateDirect(docIds.size()*Integer.BYTES);
+        ByteBuffer freqBuffer = ByteBuffer.allocateDirect(docIds.size()*Integer.BYTES);
+        for (int i = 0; i< docIds.size(); i++) {              //for each posting in postingList
+            idBuffer.putInt(docIds.get(i));
+            freqBuffer.putInt(frequencies.get(i));
             offset++;
         }
-        if(is_merged)
-            Scorer.BM25_termUpperBound(postingList,lexiconEntry);
-        lexiconEntry.setDocIdOffset(offset * Integer.BYTES);
-        lexiconEntry.setFrequencyOffset(offset * Integer.BYTES);
-        lexiconEntry.setPostingNumber(postingList.size());
-        //number of posting (postiList.size()) is used for retrieve not compressed posting lists from disk
+        idBuffer.flip();
+        freqBuffer.flip();
+        docIdStream.write(idBuffer);
+        frequencyStream.write(freqBuffer);
 
         return offset;      // is not an offset, but the number of posting lists written
     }
 
 
-    /**
-     * Adds skip pointers to the Lexicon entry for the given token based on the posting list.
-     *
-     * @param lexiconEntry  The lexicon entry associated with the token.
-     */
-    private void addSkipPointers(LexiconEntry lexiconEntry, int offset) {
-        int blockSize = (int) Math.round(Math.sqrt(postingList.size()));
-        int i = 0;
-        int numBlocks = 0;
-        List<SkipPointer> skippingPointers = new ArrayList<>();
-        int len = postingList.size();
-        for(int j = 0; j<len;j++){
-            if (++i == blockSize || j == postingList.size() - 1){        // last block could be smaller
-                int docIdsOffset = (i * numBlocks * Integer.BYTES) + (offset * Integer.BYTES);
-                int frequencyOffset = docIdsOffset;
-                skippingPointers.add(new SkipPointer(postingList.get(j).docid,docIdsOffset,frequencyOffset,i));
-                i = 0;
-                numBlocks++;
-            }
-        }
-        if(skippingPointers.size()>1)
-            numBlocks = SkipPointer.write(skippingPointers, lexiconEntry);
-
-        lexiconEntry.setNumBlocks(numBlocks);
-    }
-
-
-
-    /**
-     * Writes compressed posting lists using Elias-Fano compression for docIds and Unary compression for frequencies.
-     * The method handle skipping pointers if the dimension of the posting list is above a threshold @see POSTING_SIZE_THRESHOLD
-     *
-     * @param docStream   The output stream for document IDs.
-     * @param freqStream  The output stream for frequencies.
-     * @param docOffset   The initial offset for document IDs in the output stream.
-     * @param freqOffset  The initial offset for frequencies in the output stream.
-     * @param is_merged   If not merged, skipping pointers are not enabled
-     * @return An array of two integers representing the final offsets after writing the compressed data.
-     *         The first element is the offset for document IDs, and the second element is the offset for frequencies.
-     */
-
-    public int[] writeToDiskCompressed(FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset, boolean is_merged, LexiconEntry lexiconEntry) throws IOException {
+    public int[] writeToDiskCompressed(FileChannel docStream, FileChannel freqStream, int docOffset, int freqOffset, LexiconEntry lexiconEntry) throws IOException {
         int[] offsets = new int[]{docOffset,freqOffset};
-
-        List<List<Posting>> postingListsToCompress = new ArrayList<>();
-
-        int U = postingList.get(postingList.size() - 1).docid;       // greatest int to be stored
-        int n = postingList.size();                                   // how many posting must be stored
-
-        // Need Skipping Pointer
-        List<SkipPointer> skipPointers = new ArrayList<>();
-
-        // check if we are writing the final posting list for the token (is merged)
-        // check if the size of compressed docIds will be above the POSTING_SIZE_TRESHOLD
-        if(is_merged && ((n*Math.ceil(Math.log(U/(double)n) / Math.log(2.0)) +2*n)/8 > POSTING_SIZE_THRESHOLD)){
-            //customLogger.info("Initialize skipping pointers");
-            // initialize skipping pointers using heuristically optimal block size
-            int blockSize = (int) Math.round(Math.sqrt(n));
-            initializeSkipPointers(blockSize,postingListsToCompress,skipPointers,postingList);
-        }else{
-            // create anyway a list of list in order to use a unique method to write and
-            // compressed posting list both if it's divided in blocks or not
-            postingListsToCompress.add(postingList);
-        }
-        if(is_merged)
-            Scorer.BM25_termUpperBound(postingList,lexiconEntry);
         lexiconEntry.setFrequencyOffset(offsets[1]);
         lexiconEntry.setDocIdOffset(offsets[0]);
-        offsets = compressAndWritePostingList(postingListsToCompress,skipPointers,docStream,freqStream, offsets[0], offsets[1]);
+        lexiconEntry.setMaxId(docIds.get(docIds.size()-1));
+        offsets = compressAndWritePostingList(docStream,freqStream, offsets[0], offsets[1]);
 
-        if(skipPointers.size() > 1) { // check if we have skipping pointers
-            int numBlocks = SkipPointer.write(skipPointers, lexiconEntry);  // write them on disk
-            lexiconEntry.setNumBlocks(numBlocks);           // update lexicon entry
-        }
-
-        //customLogger.info("...posting list stored");
         return offsets;
 
     }
 
-    /**
-     *
-     * @param postingListsToCompress A list of list of postings to be compressed and written.
-     * @param skipPointers           The list of skip pointers for skip compression. May be empty if no skip pointers are used.
-     * @param docStream              The output stream for document IDs.
-     * @param freqStream             The output stream for frequencies.
-     * @param docOffset              The initial offset for writing document IDs in the output stream.
-     * @param freqOffset             The initial offset for writing frequencies in the output stream.
-     * @return An array of two integers representing the final offsets after writing the compressed data.
-     *         The first element is the offset for document IDs, and the second element is the offset for frequencies.
-     */
-    private int[] compressAndWritePostingList(List<List<Posting>> postingListsToCompress, List<SkipPointer> skipPointers, FileOutputStream docStream, FileOutputStream freqStream, int docOffset, int freqOffset) throws IOException {
-        // if posting list is not divided in blocks, this for have a single iteration
-        for(List<Posting> postingList : postingListsToCompress){
-            //customLogger.info("Compressing document ids");
-            EliasFanoCompressedList eliasFanoCompressedDocIdList = EliasFano.compress(postingList);
-            //customLogger.info("Compressing term frequencies");
-            List<BitSet> unaryCompressedFrequencyList = UnaryCompressor.compress(postingList);
-
-            //customLogger.info("Writing compressed document ids");
-            if(skipPointers.size()>0)
-                skipPointers.get(postingListsToCompress.indexOf(postingList)).setDocIdOffset(docOffset);
-            docOffset += eliasFanoCompressedDocIdList.writeToDisk(docStream);
-
-            //customLogger.info("Writing compressed term frequencies");
-            if(skipPointers.size()>0)
-                skipPointers.get(postingListsToCompress.indexOf(postingList)).setFrequencyOffset(freqOffset);
-            freqOffset = UnaryCompressor.writeToDisk(unaryCompressedFrequencyList,freqOffset, freqStream);
-
-            // update skipPointer parameters
-            if(skipPointers.size()>0) {
-                SkipPointer skipPointer = skipPointers.get(postingListsToCompress.indexOf(postingList));
-                skipPointer.setMaxDocId(postingList.get(postingList.size()-1).docid);
-                skipPointer.setNumberOfDocId(postingList.size());
-            }
-        }
-
+    private int[] compressAndWritePostingList(FileChannel docStream, FileChannel freqStream, int docOffset, int freqOffset) throws IOException {
+        int maxDocId = docIds.get(docIds.size()-1);
+        int n = docIds.size();
+        byte [] compressedId = new byte[EliasFano.getCompressedSize(maxDocId,n)];
+        final int l = EliasFano.getL(maxDocId, n);
+        long lowBitsOffset = 0;
+        long highBitsOffset = EliasFano.roundUp(l * n, Byte.SIZE);
+        EliasFano.compress(docIds,compressedId,l,new long[]{lowBitsOffset,highBitsOffset},0);
+        docOffset += EliasFano.writeToDisk(compressedId,docStream);
+        List<BitSet> unaryCompressedFrequencyList = UnaryCompressor.compress(frequencies);
+        freqOffset = UnaryCompressor.writeToDisk(unaryCompressedFrequencyList,freqStream,freqOffset);
         return new int[]{docOffset, freqOffset};
     }
 
-    /**
-     * Initializes skip pointers by dividing the posting list into blocks.
-     *
-     * @param blockSize             The number of postings in each block.
-     * @param postingListsToCompress The list to store sublists of postings, each representing a block.
-     * @param skipPointers          The list to store skip pointers corresponding to each block.
-     * @param postingLists          The original posting list to be compressed.
-     */
-    private void initializeSkipPointers(int blockSize, List<List<Posting>> postingListsToCompress, List<SkipPointer> skipPointers, List<Posting> postingLists) {
-        int i=0;
-        int j=0;
 
-        while(true){
-            if (++i % blockSize == 0 || i >= postingLists.size()){                    //Each block contains blockSize postings
-                postingListsToCompress.add(postingLists.subList(j,i));                // populate the list of posting list
-                skipPointers.add(new SkipPointer());
-                j = i;
-                if(i >= postingLists.size())
-                    break;
-            }
-        }
+
+    public List<Integer> getDocIds() {
+        return docIds;
     }
 
-
-
-
-    @Override
-    public String toString() {
-        return "PostingList{" +
-                "postingList=" + postingList +
-                ", term='" + term + '\'' +
-                ", currentDocIdIndex=" + currentDocIdIndex +
-                ", inMemory=" + inMemory +
-                ", numBlockRead=" + numBlockRead +
-                '}';
+    public List<Integer> getFrequencies() {
+        return frequencies;
     }
 }

@@ -1,28 +1,41 @@
 package unipi.aide.mircv.model;
 
-public class LexiconEntry {
+import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.exceptions.UnableToWriteLexiconException;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+
+import static unipi.aide.mircv.model.Lexicon.stringToArrayByteFixedDim;
+
+public class LexiconEntry implements Serializable {
     private int df;
     private double idf;
     private int docIdOffset;
     private int frequencyOffset;
-    private int postingNumber;          // used in retrieve uncompressed postingList
-    private int numBlocks = 1;
-    private int skipPointerOffset;
-    private double termUpperBound;      // max score dynamic pruning
+    private int maxDocId;
+    private double BM25_termUpperBound;      // max score dynamic pruning
+    private double TFIDF_termUpperBound;
 
     public LexiconEntry(){
         df = 1;
     }
 
-    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, int numBlocks, int postingNumber, int skipPointerOffset, double termUpperBound) {
+    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset,double BM25_termUpperBound,double TFIDF_termUpperBound, int maxDocId) {
         this.df = df;
         this.idf = idf;
         this.docIdOffset = docIdOffset;
         this.frequencyOffset = frequencyOffset;
-        this.numBlocks = numBlocks;
-        this.skipPointerOffset = skipPointerOffset;
-        this.postingNumber = postingNumber;
-        this.termUpperBound = termUpperBound;
+        this.BM25_termUpperBound = BM25_termUpperBound;
+        this.TFIDF_termUpperBound = TFIDF_termUpperBound;
+        this.maxDocId = maxDocId;
+    }
+
+    public static int getEntryDimension() {
+        return 40;
     }
 
     public void updateDF(){
@@ -37,9 +50,6 @@ public class LexiconEntry {
         this.frequencyOffset = frequencyOffset;
     }
 
-    public void setNumBlocks(int numBlocks) {
-        this.numBlocks = numBlocks;
-    }
 
     public void setDf(int df) {
         this.df = df;
@@ -65,25 +75,16 @@ public class LexiconEntry {
         return frequencyOffset;
     }
 
-    public int getNumBlocks() {
-        return numBlocks;
+    public double getBM25_termUpperBound() {return BM25_termUpperBound;}
+
+    public void setTermUpperBounds(double BM25_termUpperBound, double TFIDF_termUpperBound) {
+        this.BM25_termUpperBound = BM25_termUpperBound;
+        this.TFIDF_termUpperBound = TFIDF_termUpperBound;
     }
 
-    public int getPostingNumber() {
-        return postingNumber;
+    public double getTFIDF_termUpperBound() {
+        return TFIDF_termUpperBound;
     }
-
-    public void setPostingNumber(int postingListsNumber) {
-        this.postingNumber = postingListsNumber;
-    }
-
-    public void setSkipPointerOffset(int skipPointerOffset) {this.skipPointerOffset=skipPointerOffset;}
-
-    public int getSkipPointerOffset() {return skipPointerOffset;}
-
-    public double getTermUpperBound() {return termUpperBound;}
-
-    public void setTermUpperBound(double termUpperBound) {this.termUpperBound = termUpperBound;}
 
     @Override
     public String toString() {
@@ -92,15 +93,37 @@ public class LexiconEntry {
                 ", idf=" + idf +
                 ", docIdOffset=" + docIdOffset +
                 ", frequencyOffset=" + frequencyOffset +
-                ", postingNumber=" + postingNumber +
-                ", numBlocks=" + numBlocks +
-                ", skipPointerOffset=" + skipPointerOffset +
-                ", termUpperBound=" + termUpperBound +
+                ", termUpperBound=" + BM25_termUpperBound +
                 "}\n";
     }
 
-    public void updateNumberOfPostings(int n) {
-        postingNumber+=n;
+
+    public int getMaxDocId() {
+        return maxDocId;
     }
+
+    public void setMaxId(int maxId) { this.maxDocId = maxId;}
+
+    public void writeToDisk(String token) throws UnableToWriteLexiconException {
+        File file = new File(Configuration.getLexiconPath());
+        try(FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
+                StandardOpenOption.APPEND,
+                StandardOpenOption.CREATE)){
+            ByteBuffer buffer = ByteBuffer.allocateDirect(45+LexiconEntry.getEntryDimension());
+            buffer.put(stringToArrayByteFixedDim(token,45));
+            buffer.putInt(df);
+            buffer.putDouble(idf);
+            buffer.putInt(docIdOffset);
+            buffer.putInt(frequencyOffset);
+            buffer.putDouble(BM25_termUpperBound);
+            buffer.putDouble(TFIDF_termUpperBound);
+            buffer.putInt(maxDocId);
+            buffer.flip();
+            stream.write(buffer);
+        } catch (IOException e) {
+            throw new UnableToWriteLexiconException(e.getMessage());
+        }
+    }
+
 }
 

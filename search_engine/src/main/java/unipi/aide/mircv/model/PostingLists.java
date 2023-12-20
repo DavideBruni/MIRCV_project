@@ -4,9 +4,12 @@ import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.PostingListStoreException;
 import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
-import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -16,7 +19,6 @@ public class PostingLists {
     private static final String TEMP_DOC_ID_DIR = "/invertedIndex/temp/docIds";
     private static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     private static int NUM_FILE_WRITTEN = 0;       // since partial posting lists are stored in different partition, we need to know how many of them
-    private static final int POSTING_SIZE_THRESHOLD = 2048;      //2KB
 
     public PostingLists() { this.postings = new HashMap<>(1500, 0.75F); }
 
@@ -29,14 +31,13 @@ public class PostingLists {
      * @param frequency The frequency of the token in the document.
      */
     public void add(int docId, String token, int frequency) {
-        Posting posting = new Posting(docId, frequency);
         if (!postings.containsKey(token)){
             PostingList postingList = new PostingList(){};
-            postingList.add(posting);
+            postingList.add(docId,frequency);
             postings.put(token,postingList);     // If the specified token is not present in the postings, a new PostingList is created.
         }else {
             // add the new Posting to the token posting list
-            postings.get(token).add(posting);
+            postings.get(token).add(docId,frequency);
         }
     }
 
@@ -47,15 +48,17 @@ public class PostingLists {
      * @param token        The token associated with the PostingList.
      */
     public static PostingList merge(List<PostingList> postingLists, String token) {
-        List<Posting> postings_merged = new ArrayList<>();
-        for(PostingList postingList : postingLists){
-            postings_merged.addAll(postingList.postingList);
+        List<Integer> docIds = new ArrayList<>();
+        List<Integer> frequencies = new ArrayList<>();
+        for (PostingList postingList : postingLists) {
+            docIds.addAll(postingList.getDocIds());
+            frequencies.addAll(postingList.getFrequencies());
         }
-        // Sort the merged PostingList in ascending order
-        postings_merged.sort(Comparator.comparingInt(Posting::getDocid));
-        // The resulting PostingList is then associated with the specified token
-        return new PostingList(postings_merged,token);
+
+        return new PostingList(docIds,frequencies,token);
+
     }
+
 
     public void sort() {
         postings = new LinkedHashMap<>(
@@ -83,21 +86,27 @@ public class PostingLists {
         StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR);
         StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_FREQ_DIR);
 
-        try (FileOutputStream docStream = new FileOutputStream(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat");
-             FileOutputStream freqStream = new FileOutputStream(Configuration.getRootDirectory() + TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat")){
+        try (FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR + "/part" + NUM_FILE_WRITTEN + ".dat"),
+                StandardOpenOption.APPEND,
+                StandardOpenOption.CREATE);
+             FileChannel freqStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory() + TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat"),
+                     StandardOpenOption.APPEND,
+                     StandardOpenOption.CREATE)){
             if (!compressed){
                 int offset = 0;
-                try(DataOutputStream docStream_dos = new DataOutputStream(docStream);
-                    DataOutputStream freqStream_dos = new DataOutputStream(freqStream)) {
-                    Set<String> keySet = postings.keySet();
-                    for(String token : keySet)
-                        offset = postings.get(token).writeToDiskNotCompressed(docStream_dos, freqStream_dos, offset, false, Lexicon.getEntry(token,false));
+                Set<String> keySet = postings.keySet();
+                for(String token : keySet) {
+                    LexiconEntry lexiconEntry = Lexicon.getEntry(token);
+                    lexiconEntry.setDocIdOffset(offset * Integer.BYTES);
+                    lexiconEntry.setFrequencyOffset(offset * Integer.BYTES);
+                    offset = postings.get(token).writeToDiskNotCompressed(docStream, freqStream, offset);
                 }
             }else{
                 int [] offsets = new int[2];
                 Set<String> keySet = postings.keySet();
-                for(String token : keySet)
-                    offsets = postings.get(token).writeToDiskCompressed(docStream, freqStream,offsets[0], offsets[1], false, Lexicon.getEntry(token, false));
+                for(String token : keySet) {
+                    offsets = postings.get(token).writeToDiskCompressed(docStream, freqStream, offsets[0], offsets[1],Lexicon.getEntry(token));
+                }
             }
             NUM_FILE_WRITTEN++;
 
