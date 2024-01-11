@@ -32,7 +32,7 @@ public class PostingLists {
      */
     public void add(int docId, String token, int frequency) {
         if (!postings.containsKey(token)){
-            PostingList postingList = new PostingList(){};
+            PostingList postingList = new UncompressedPostingList();
             postingList.add(docId,frequency);
             postings.put(token,postingList);     // If the specified token is not present in the postings, a new PostingList is created.
         }else {
@@ -40,25 +40,6 @@ public class PostingLists {
             postings.get(token).add(docId,frequency);
         }
     }
-
-    /**
-     * Merges multiple PostingLists associated with the same token into a single PostingList.
-     *
-     * @param postingLists A list of PostingLists to be merged.
-     * @param token        The token associated with the PostingList.
-     */
-    public static PostingList merge(List<PostingList> postingLists, String token) {
-        List<Integer> docIds = new ArrayList<>();
-        List<Integer> frequencies = new ArrayList<>();
-        for (PostingList postingList : postingLists) {
-            docIds.addAll(postingList.getDocIds());
-            frequencies.addAll(postingList.getFrequencies());
-        }
-
-        return new PostingList(docIds,frequencies,token);
-
-    }
-
 
     public void sort() {
         postings = new LinkedHashMap<>(
@@ -74,14 +55,7 @@ public class PostingLists {
         );
     }
 
-
-    /**
-     * Writes the posting lists to disk, storing document IDs and frequencies in separate files.
-     * The method supports both compressed and uncompressed formats based on the specified parameter.
-     *
-     * @param compressed If true, the data is written in a compressed format; otherwise, it is uncompressed.
-     */
-    public void writeToDisk(boolean compressed) throws PostingListStoreException {
+    public void writeOnDisk(boolean compressed) throws PostingListStoreException {
         // creates the directories if needed
         StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_DOC_ID_DIR);
         StreamHelper.createDir(Configuration.getRootDirectory() + TEMP_FREQ_DIR);
@@ -92,21 +66,18 @@ public class PostingLists {
              FileChannel freqStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory() + TEMP_FREQ_DIR + "/part" + NUM_FILE_WRITTEN + ".dat"),
                      StandardOpenOption.APPEND,
                      StandardOpenOption.CREATE)){
-            if (!compressed){
-                int offset = 0;
-                Set<String> keySet = postings.keySet();
-                for(String token : keySet) {
-                    LexiconEntry lexiconEntry = Lexicon.getEntry(token);
-                    lexiconEntry.setDocIdOffset(offset * Integer.BYTES);
-                    lexiconEntry.setFrequencyOffset(offset * Integer.BYTES);
-                    offset = postings.get(token).writeToDiskNotCompressed(docStream, freqStream, offset);
+            int [] offsets = new int[2];
+            Set<String> keySet = postings.keySet();
+            for(String token : keySet) {
+                PostingList postingList = postings.get(token);
+                if (compressed){
+                    postingList = new CompressedPostingList(postingList);
                 }
-            }else{
-                int [] offsets = new int[2];
-                Set<String> keySet = postings.keySet();
-                for(String token : keySet) {
-                    offsets = postings.get(token).writeToDiskCompressed(docStream, freqStream, offsets[0], offsets[1],Lexicon.getEntry(token));
-                }
+                LexiconEntry lexiconEntry = Lexicon.getEntry(token,false);
+                lexiconEntry.setDocIdOffset(offsets[0]);
+                lexiconEntry.setFrequencyOffset(offsets[1]);
+                offsets = postingList.writeOnDisk(docStream, freqStream, offsets);
+                // it's not necessary add the docIds and frequencies size since we have no block division here
             }
             NUM_FILE_WRITTEN++;
 

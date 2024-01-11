@@ -114,25 +114,17 @@ public class Lexicon implements Serializable{
         return dataInputStreams;
     }
 
-    /**
-     * Reads, from the specified DataInputStream ,the remaining part of a LexiconEntry after the token has already been read.
-     * If the end of the stream (EOF) is reached during reading, the method returns null.
-     *
-     * @param partialLexiconStream The DataInputStream representing the partial lexicon stream.
-     * @return A LexiconEntry object with fields populated from the input stream, or null if the end of the stream is reached.
-     */
-    public static LexiconEntry readEntry(FileChannel partialLexiconStream) {
+
+    public static LexiconEntry readEntryFromPartition(FileChannel partialLexiconStream) {
         // we already read the token stored, we have to read the remaning part of the LexiconEntry
         LexiconEntry lexiconEntry = new LexiconEntry();
         try {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension());
+            ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension(false));
             partialLexiconStream.read(buffer);
             buffer.flip();
             lexiconEntry.setDf(buffer.getInt());
-            lexiconEntry.setIdf(buffer.getDouble());
             lexiconEntry.setDocIdOffset(buffer.getInt());
             lexiconEntry.setFrequencyOffset(buffer.getInt());
-            lexiconEntry.setTermUpperBounds(buffer.getDouble(),buffer.getDouble());
             lexiconEntry.setMaxId(buffer.getInt());
         } catch (EOFException eof){
             lexiconEntry = null;
@@ -144,18 +136,8 @@ public class Lexicon implements Serializable{
     }
 
 
-    /**
-     * Retrieves the value of a specific entry identified by the given term using the provided value extractor function.
-     * This method first attempts to retrieve the LexiconEntry associated with the term using the {@link #getEntry(String)} method.
-     * If a LexiconEntry is found, the value extractor function is applied to obtain the desired value.
-     *
-     * @param term           The term for which to retrieve the entry value.
-     * @param valueExtractor A function that extracts the desired value from a LexiconEntry.
-     * @param <T>            The type of the value to be extracted.
-     * @return The extracted value of the entry, or null if the entry is not found.
-     */
     public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        LexiconEntry lexiconEntry = getEntry(term);
+        LexiconEntry lexiconEntry = getEntry(term,true);
         if (lexiconEntry!= null)
             return valueExtractor.apply(lexiconEntry);
         return null;
@@ -166,19 +148,19 @@ public class Lexicon implements Serializable{
     /**
      * Retrieves the LexiconEntry for the specified token.
      * This method first attempts to retrieve the entry from memory. If it is not found, it is then
-     * retrieved from the lexicon stored on disk using the {@link #getEntryFromDisk(String)} method.
+     * retrieved from the lexicon stored on disk using the {@link #getEntryFromDisk(String,boolean)} method.
      *
      * @param token The token for which to retrieve the LexiconEntry.
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
-     * @see #getEntryFromDisk(String)
+     * @see #getEntryFromDisk(String,boolean)
      */
-    public static LexiconEntry getEntry(String token) {
+    public static LexiconEntry getEntry(String token,boolean is_merged) {
         LexiconEntry res = instance.lexiconCache.get(token);
         if (res == null) {
             if (instance.entries != null)
                 res = instance.entries.get(token);
             if (res == null) {
-                res = getEntryFromDisk(token);
+                res = getEntryFromDisk(token, is_merged);
                 if(Configuration.getCache()){
                     instance.lexiconCache.put(token,res);
                 }else {
@@ -195,8 +177,8 @@ public class Lexicon implements Serializable{
      * @param targetToken The token for which to retrieve the LexiconEntry from disk.
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      */
-    private static LexiconEntry getEntryFromDisk(String targetToken) {
-        int entrySize = (CollectionStatistics.getLongestTermLength() + LexiconEntry.getEntryDimension());
+    private static LexiconEntry getEntryFromDisk(String targetToken, boolean is_merged) {
+        int entrySize = (45 + LexiconEntry.getEntryDimension(is_merged));
         long low = 0;
         long high = CollectionStatistics.getNumberOfTokens();
         long mid;
@@ -208,18 +190,21 @@ public class Lexicon implements Serializable{
                 stream.position(mid*entrySize); // position at mid-file (or mid "partition" if it's not the first iteration)
 
                 // read the record and parse it to string
-                ByteBuffer recordBytes = ByteBuffer.allocateDirect(CollectionStatistics.getLongestTermLength());
-                stream.read(recordBytes);
-                String currentToken = new String(recordBytes.array(), StandardCharsets.UTF_8).trim();
+                ByteBuffer recordBytes = ByteBuffer.allocateDirect(45);
+                int len = stream.read(recordBytes);
+                recordBytes.flip();
+                byte [] string_buffer = new byte[45];
+                recordBytes.get(string_buffer);
+                String currentToken = new String(string_buffer, 0, len).trim();
 
                 int compareResult = currentToken.compareTo(targetToken);
 
                 if (compareResult == 0) {       //find the entry
-                    ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension());
+                    ByteBuffer buffer = ByteBuffer.allocateDirect(entrySize-45);
                     stream.read(buffer);
                     buffer.flip();
                     return new LexiconEntry(buffer.getInt(), buffer.getDouble(), buffer.getInt(),
-                            buffer.getInt(), buffer.getDouble(), buffer.getDouble(),buffer.getInt());
+                            buffer.getInt(), buffer.getDouble(), buffer.getDouble(),buffer.getInt(), is_merged);
                 } else if (compareResult < 0) {     // current entry is lower than target one
                     low = mid + 1;
                 } else {                // current entry is greater than target one
@@ -261,7 +246,7 @@ public class Lexicon implements Serializable{
      * @param is_merged A boolean indicating whether the lexicon is to be written as a merged lexicon.
      */
 
-    public static void writeToDisk(boolean is_merged,boolean debug) throws UnableToWriteLexiconException {
+    public static void writeOnDisk(boolean is_merged, boolean debug) throws UnableToWriteLexiconException {
         String filename;
         if(is_merged) {
             filename = Configuration.getLexiconPath();
@@ -273,20 +258,9 @@ public class Lexicon implements Serializable{
         try(FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
                 StandardOpenOption.APPEND,
                 StandardOpenOption.CREATE)){
-            ByteBuffer buffer = ByteBuffer.allocateDirect(45+LexiconEntry.getEntryDimension());
             for (String key : instance.entries.keySet()) {
-                buffer.clear();
-                buffer.put(stringToArrayByteFixedDim(key,45));
                 LexiconEntry tmp = instance.entries.get(key);
-                buffer.putInt(tmp.getDf());
-                buffer.putDouble(tmp.getIdf());
-                buffer.putInt(tmp.getDocIdOffset());
-                buffer.putInt(tmp.getFrequencyOffset());
-                buffer.putDouble(tmp.getBM25_termUpperBound());
-                buffer.putDouble(tmp.getTFIDF_termUpperBound());
-                buffer.putInt(tmp.getMaxDocId());
-                buffer.flip();
-                stream.write(buffer);
+                tmp.writeOnDisk(stream,key,is_merged);
             }
             if (!is_merged)
                 NUM_FILE_WRITTEN++;

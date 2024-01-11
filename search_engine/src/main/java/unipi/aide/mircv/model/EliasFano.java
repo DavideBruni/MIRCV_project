@@ -69,7 +69,8 @@ public class EliasFano {
 	 *            the array to compress (MONOTONICALLY INCREASING)
 	 * @return the compress values
 	 */
-	public static int compress(final List<Integer> in, byte [] out, int l, long[] docIdsOffset, int prev) {
+	public static void compress(final List<Integer> in, byte [] out, int l, long[] docIdsOffset) {
+		int prev = 0;
 		for (int i = 0; i < in.size(); i++) {
 			int low = Bits.VAL_TO_WRITE[l] & in.get(i);
 			Bits.writeBinary(out, docIdsOffset[0], low, l);
@@ -79,7 +80,6 @@ public class EliasFano {
 			docIdsOffset[1] += (high - prev) + 1;
 			prev = high;
 		}
-		return prev;
 	}
 
 	public static List<Integer> decompress(final byte[] in, final int length, final int maxDocId) {
@@ -130,5 +130,103 @@ public class EliasFano {
 			throw new RuntimeException(e);
 		}
 		return written;
+	}
+
+	/**
+	 * Decompresses the idx-th element from the compressed array {@code in},
+	 * starting from {@code inOffset}. The uncompressed array has size
+	 * {@code length} and its elements are encoded using {@code l} lower bits
+	 * each.
+	 *
+	 * @param in
+	 *            the compressed array
+	 * @param length
+	 *            the size of the uncompressed array
+	 * @param idx
+	 *            the index of the element to decompress
+	 * @return the value of the idx-th element
+	 */
+	public static int get(final byte[] in, final int maxDocId, final int length, final int idx) {
+		int l = getL(maxDocId,length);
+		final long lowBitsOffset = 0;
+		final long highBitsOffset = roundUp(lowBitsOffset + (l * length), Byte.SIZE);
+
+		final int low = Bits.readBinary(in, lowBitsOffset + (l * idx), l);
+
+		final int startOffset = (int) (highBitsOffset / Byte.SIZE);
+		int offset = startOffset;
+		int prev1Bits = 0;
+		int _1Bits = 0;
+		while (_1Bits < idx + 1) {
+
+			prev1Bits = _1Bits;
+			_1Bits += Integer.bitCount(in[offset++] & 0xFF);
+		}
+		offset--; // rollback
+		int delta = ((offset - startOffset) * Byte.SIZE) - prev1Bits; // delta
+		int readFrom = offset * Byte.SIZE;
+		for (int i = 0; i < (idx + 1) - prev1Bits; i++) {
+
+			int high = Bits.readUnary(in, readFrom);
+			delta += high;
+			readFrom += high + 1;
+
+		}
+
+		return (delta << l) | low;
+	}
+
+
+	public static int nextGEQ(final byte[] in, final int length, final int maxDocId, final int val) {
+
+		int l = getL(length,maxDocId);
+		final long lowBitsOffset = 0;
+		final long highBitsOffset = roundUp(lowBitsOffset + (l * length), Byte.SIZE);
+
+		final int h = val >>> l;
+
+		final int startOffset = (int) (highBitsOffset / Byte.SIZE);
+		int offset = startOffset;
+		int prev1Bits = 0;
+		int _0Bits = 0;
+		int _1Bits = 0;
+		while (_0Bits < h && _1Bits < length) {
+
+			prev1Bits = _1Bits;
+			int bitCount = Integer.bitCount(in[offset++] & 0xFF);
+			_1Bits += bitCount;
+			_0Bits += Byte.SIZE - bitCount;
+		}
+
+		offset = Math.max(offset - 1, startOffset); //conditional rollback
+
+		int low = Bits.readBinary(in, lowBitsOffset + (l * prev1Bits), l);
+		int delta = ((offset - startOffset) * Byte.SIZE) - prev1Bits; // delta
+		int readFrom = offset * Byte.SIZE;
+		int high = Bits.readUnary(in, readFrom);
+		delta += high;
+		readFrom += high + 1;
+
+		if (((delta << l) | low) >= val) {
+
+			return prev1Bits;
+
+		} else {
+
+			for (int i = prev1Bits + 1; i < length; i++) {
+
+				low = Bits.readBinary(in, lowBitsOffset + (l * i), l);
+				high = Bits.readUnary(in, readFrom);
+				delta += high;
+				readFrom += high + 1;
+
+				if (((delta << l) | low) >= val) return i;
+
+			}
+		}
+
+		return -1 ;
+
+
 	}
 }

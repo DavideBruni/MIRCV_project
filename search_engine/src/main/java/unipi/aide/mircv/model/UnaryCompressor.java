@@ -6,8 +6,11 @@ import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
+import org.apache.commons.lang3.ArrayUtils;
 
 public class UnaryCompressor {
+
+    private static int currentFrequencyIndex = 0;
 
     public static List<BitSet> compress(List<Integer> frequencies) {
         List<BitSet> res = new ArrayList<>();
@@ -24,14 +27,25 @@ public class UnaryCompressor {
     }
 
 
-    public static int writeToDisk(List<BitSet> unaryCompressedFrequencyList, FileChannel stream, int offset) throws IOException {
+    public static int writeToDisk(List<BitSet> unaryCompressedFrequencyList, FileChannel stream, int offset,boolean merged) throws IOException {
+        byte [] totalBuffer = new byte[0];
         for(BitSet bitSet : unaryCompressedFrequencyList){
             byte[] bits = bitSet.toByteArray();
-            ByteBuffer buffer = ByteBuffer.allocateDirect(bits.length);
-            buffer.put(bits);
-            buffer.flip();
-            offset += stream.write(buffer);
+            totalBuffer = ArrayUtils.addAll(totalBuffer, bits);
+            offset+=bits.length;
         }
+        if(merged) {
+            ByteBuffer positionBuffer = ByteBuffer.allocateDirect(Integer.BYTES);
+            offset += Integer.BYTES;
+            positionBuffer.putInt(offset);  // position next block
+            positionBuffer.flip();
+            stream.write(positionBuffer);
+
+        }
+        ByteBuffer buffer = ByteBuffer.allocateDirect(totalBuffer.length);
+        buffer.put(totalBuffer);
+        buffer.flip();
+        stream.write(buffer);
         return offset;
     }
 
@@ -59,4 +73,23 @@ public class UnaryCompressor {
         }
         return frequencies;
     }
+
+    public static int get(byte[] compressedIds, int index) {
+        int number = 0;
+        for(int i = currentFrequencyIndex; i<=index; i++) {       // from lastDecompressNumber, to the actual one
+            number = 0;
+            for (; index < compressedIds.length; index++) {
+                int bitsSet = Integer.bitCount(compressedIds[index] & 0xFF);
+                if (bitsSet == 0)
+                    break;
+                number += bitsSet;
+                if (compressedIds[index] % 2 == 0)        // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
+                    break;
+            }
+        }
+        return number;
+    }
+
+    public static void resetCurrentFrequencyIndex(){currentFrequencyIndex =0;}
+
 }

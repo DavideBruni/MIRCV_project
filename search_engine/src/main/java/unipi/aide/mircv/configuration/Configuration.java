@@ -14,6 +14,7 @@ public class Configuration {
     private static String SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/";
     private static String DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/";
     private static String CACHE_PATH = ROOT_DIRECTORY+"/cache/postingLists.dat";
+    public static final int BLOCK_TRESHOLD = 2048;
     private static boolean cache = false;
 
 

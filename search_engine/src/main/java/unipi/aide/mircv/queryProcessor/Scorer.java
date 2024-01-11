@@ -67,7 +67,6 @@ public class Scorer {
      * @return A priority queue of DocScorePair objects sorted by descending scores.
      *         The queue contains the documents with the highest scores, limited by the configured minHeapSize.
      */
-    /*
     public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists, boolean conjunctiveQuery) {
         PriorityQueue<DocScorePair> q = new PriorityQueue<>();
         int minHeapSize = Configuration.getMinheapDimension();
@@ -199,5 +198,5 @@ public class Scorer {
 
 
     }
-*/
+
 }

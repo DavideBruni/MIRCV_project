@@ -16,7 +16,9 @@ public class LexiconEntry implements Serializable {
     private double idf;
     private int docIdOffset;
     private int frequencyOffset;
-    private int maxDocId;
+    private int docIdLength;
+    private int frequencyLength;
+    private int maxDocId;                    // used only during SPIMI and merge operations
     private double BM25_termUpperBound;      // max score dynamic pruning
     private double TFIDF_termUpperBound;
 
@@ -24,18 +26,17 @@ public class LexiconEntry implements Serializable {
         df = 1;
     }
 
-    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset,double BM25_termUpperBound,double TFIDF_termUpperBound, int maxDocId) {
+    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, double BM25_termUpperBound,double TFIDF_termUpperBound, int number, boolean is_merged) {
         this.df = df;
         this.idf = idf;
         this.docIdOffset = docIdOffset;
         this.frequencyOffset = frequencyOffset;
         this.BM25_termUpperBound = BM25_termUpperBound;
         this.TFIDF_termUpperBound = TFIDF_termUpperBound;
-        this.maxDocId = maxDocId;
     }
 
-    public static int getEntryDimension() {
-        return 40;
+    public static int getEntryDimension(boolean is_merged) {
+        return is_merged ? 44 : 16;
     }
 
     public void updateDF(){
@@ -75,7 +76,11 @@ public class LexiconEntry implements Serializable {
         return frequencyOffset;
     }
 
-    public double getBM25_termUpperBound() {return BM25_termUpperBound;}
+    public double getScoreTermUpperBound() {
+        if(Configuration.getScoreStandard().equals("BM25"))
+            return BM25_termUpperBound;
+        return TFIDF_termUpperBound;
+    }
 
     public void setTermUpperBounds(double BM25_termUpperBound, double TFIDF_termUpperBound) {
         this.BM25_termUpperBound = BM25_termUpperBound;
@@ -104,26 +109,48 @@ public class LexiconEntry implements Serializable {
 
     public void setMaxId(int maxId) { this.maxDocId = maxId;}
 
-    public void writeToDisk(String token) throws UnableToWriteLexiconException {
+    public void writeOnDisk(String token) throws UnableToWriteLexiconException {
         File file = new File(Configuration.getLexiconPath());
-        try(FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
-                StandardOpenOption.APPEND,
-                StandardOpenOption.CREATE)){
-            ByteBuffer buffer = ByteBuffer.allocateDirect(45+LexiconEntry.getEntryDimension());
-            buffer.put(stringToArrayByteFixedDim(token,45));
-            buffer.putInt(df);
-            buffer.putDouble(idf);
-            buffer.putInt(docIdOffset);
-            buffer.putInt(frequencyOffset);
-            buffer.putDouble(BM25_termUpperBound);
-            buffer.putDouble(TFIDF_termUpperBound);
-            buffer.putInt(maxDocId);
-            buffer.flip();
-            stream.write(buffer);
-        } catch (IOException e) {
+        try {
+            FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
+                    StandardOpenOption.APPEND,
+                    StandardOpenOption.CREATE);
+            writeOnDisk(stream, token, true);
+        }catch (IOException e){
             throw new UnableToWriteLexiconException(e.getMessage());
         }
     }
 
+    public void writeOnDisk(FileChannel stream, String key, boolean is_merged) throws IOException {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(45+LexiconEntry.getEntryDimension(is_merged));
+        buffer.put(stringToArrayByteFixedDim(key,45));
+        buffer.putInt(df);
+        if(is_merged)
+            buffer.putDouble(idf);
+        buffer.putInt(docIdOffset);
+        buffer.putInt(frequencyOffset);
+        if(is_merged){
+            buffer.putInt(docIdLength);
+            buffer.putInt(frequencyLength);
+            buffer.putDouble(BM25_termUpperBound);
+            buffer.putDouble(TFIDF_termUpperBound);
+        }else{
+            buffer.putInt(maxDocId);
+        }
+        buffer.flip();
+        stream.write(buffer);
+    }
+
+    public void setDocIdLength(int length) { docIdLength = length;}
+
+    public void setFrequencyLength(int length) {frequencyLength = length;}
+
+    public int getDocIdLength() {
+        return docIdLength;
+    }
+
+    public int getFrequencyLength() {
+        return frequencyLength;
+    }
 }
 
