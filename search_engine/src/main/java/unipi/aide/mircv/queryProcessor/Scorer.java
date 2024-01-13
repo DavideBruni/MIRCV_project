@@ -5,7 +5,6 @@ import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.*;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.util.Comparator;
 import java.util.List;
@@ -35,7 +34,7 @@ public class Scorer {
         return (1+ Math.log(tf))*idf;
     }
 
-    public static double[] calculateTermUpperBounds(PostingList postingList, double idf){
+    public static double[] calculateTermUpperBounds(UncompressedPostingList postingList, double idf){
         double BM25_maxScore = 0.0;
         double TFIDF_maxScore = 0.0;
         double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
@@ -90,7 +89,7 @@ public class Scorer {
                     score += postingLists[i].score();
                     try {
                         postingLists[i].next();
-                    }catch (IOException e){
+                    }catch (Exception e){
                         CustomLogger.error("Error calling next() function: "+e.getMessage());
                     }
                 } else if (conjunctiveQuery) {      // we have a postingList without the doc with minDocIdUsed
@@ -100,7 +99,7 @@ public class Scorer {
                 if(conjunctiveQuery && current!=-1) {
                     try {
                         postingLists[i].next();
-                    } catch (IOException e) {
+                    } catch (Exception e) {
                         CustomLogger.error("Error calling next() function: " + e.getMessage());
                     }
                 }

@@ -1,7 +1,9 @@
 package unipi.aide.mircv.model;
 
 import unipi.aide.mircv.configuration.Configuration;
+import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -16,14 +18,23 @@ import java.util.List;
 public class UncompressedPostingList extends PostingList{
     List<Integer> docIds;
     List<Integer> frequencies;
-    
+    private int frequenciesIndex;
+    private int startNextFrequencyBlock;
 
     public UncompressedPostingList(int[] docIdsArray, int[] freqArray, BlockDescriptor blockDescriptor) {
-        super();
+        this.docIds = new ArrayList<>();
+        this.frequencies = new ArrayList<>();
+        for(int i = 0; i<docIdsArray.length; i++){
+            docIds.add(docIdsArray[i]);
+            frequencies.add(freqArray[i]);
+        }
+        this.blockDescriptor = new BlockDescriptor(blockDescriptor);
     }
 
     public UncompressedPostingList(List<Integer> documentIds, List<Integer> freqs, BlockDescriptor blockDescriptor) {
-        super();
+        docIds = documentIds;
+        frequencies = freqs;
+        this.blockDescriptor = new BlockDescriptor(blockDescriptor);
     }
 
     public UncompressedPostingList() {
@@ -38,7 +49,28 @@ public class UncompressedPostingList extends PostingList{
     }
 
     public UncompressedPostingList(byte[] docIds, byte[] frequencies, BlockDescriptor firstBlockDescriptor) {
-        super();
+        this.docIds = new ArrayList<>();
+        this.frequencies = new ArrayList<>();
+        ByteBuffer docIdBuffer = ByteBuffer.wrap(docIds);
+        ByteBuffer freqBuffer = ByteBuffer.wrap(frequencies);
+
+        while(true){
+            try{
+                this.docIds.add(docIdBuffer.getInt());
+            }catch (Exception e){
+                break;
+            }
+        }
+        while(true){
+            try{
+                this.frequencies.add(freqBuffer.getInt());
+            }catch (Exception e){
+                break;
+            }
+        }
+
+        this.blockDescriptor = new BlockDescriptor(firstBlockDescriptor);
+        startNextFrequencyBlock = this.blockDescriptor.getNumberOfPostings();
     }
 
     public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset) throws FileNotFoundException {
@@ -51,10 +83,13 @@ public class UncompressedPostingList extends PostingList{
             docStream.position(docIdOffset);
             freqStream.position(frequencyOffset);
             ByteBuffer blockInfoBuffer = ByteBuffer.allocateDirect(2*Integer.BYTES);
+            docStream.read(blockInfoBuffer);
+            blockInfoBuffer.flip();
             BlockDescriptor blockDescriptor = new BlockDescriptor(blockInfoBuffer.getInt(),blockInfoBuffer.getInt());
+
             int numberOfPosting = blockDescriptor.getNumberOfPostings();
-            ByteBuffer bufferDocIds = ByteBuffer.allocateDirect(4*numberOfPosting);
-            ByteBuffer bufferFrequencies = ByteBuffer.allocateDirect(4*numberOfPosting);
+            ByteBuffer bufferDocIds = ByteBuffer.allocateDirect(Integer.BYTES*numberOfPosting);
+            ByteBuffer bufferFrequencies = ByteBuffer.allocateDirect(Integer.BYTES*numberOfPosting);
             docStream.read(bufferDocIds);
             freqStream.read(bufferFrequencies);
             bufferDocIds.flip();
@@ -76,12 +111,14 @@ public class UncompressedPostingList extends PostingList{
         try (FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIdsPath()));
              FileChannel freqStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getFrequencyPath()))){
 
+            docStream.position(lexiconEntry.getDocIdOffset());
+            freqStream.position(lexiconEntry.getFrequencyOffset());
+
             ByteBuffer docIdBuffer = ByteBuffer.allocateDirect(lexiconEntry.getDocIdLength());
             ByteBuffer freqBuffer = ByteBuffer.allocateDirect(lexiconEntry.getFrequencyLength());
 
             byte [] docIds = new byte [lexiconEntry.getDocIdLength() - 2*Integer.BYTES];
             byte [] frequencies = new byte [lexiconEntry.getFrequencyLength()];
-
 
             docStream.read(docIdBuffer);
             docIdBuffer.flip();
@@ -109,22 +146,77 @@ public class UncompressedPostingList extends PostingList{
 
     @Override
     public int docId() {
-        return 0;
+        if(currentIndexPostings<blockDescriptor.getNumberOfPostings()){
+            return docIds.get(currentIndexPostings);
+        }else{
+            return Integer.MAX_VALUE;
+        }
     }
 
     @Override
     public double score() {
-        return 0;
+        if(Configuration.getScoreStandard().equals("BM25")){
+            try {
+                return Scorer.BM25_singleTermDocumentScore(frequencies.get(frequenciesIndex),docIds.get(currentIndexPostings),lexiconEntry.getIdf());
+            } catch (DocumentNotFoundException e) {
+                System.out.println(e.getMessage());
+                return 0;
+            }
+        }else{
+            return Scorer.TFIDF_singleTermDocumentScore(frequencies.get(frequenciesIndex),lexiconEntry.getIdf());
+        }
     }
 
     @Override
-    public void next() throws IOException {
+    public void next(){
+        if(++currentIndexPostings == blockDescriptor.getNumberOfPostings()){
+            try{
+                // numberOfPosting is used as index limiter, so we have to consider also the 2 int of the block descriptor and the previous number of postings
+                blockDescriptor = new BlockDescriptor(docIds.get(currentIndexPostings++), 2 + blockDescriptor.getNumberOfPostings() + docIds.get(currentIndexPostings));
+                frequenciesIndex = startNextFrequencyBlock;
+                startNextFrequencyBlock += docIds.get(currentIndexPostings++);
 
+            }catch (IndexOutOfBoundsException ie){
+                currentIndexPostings = Integer.MAX_VALUE;
+                frequenciesIndex = Integer.MAX_VALUE;
+            }
+        }else{
+            frequenciesIndex++;
+        }
     }
 
     @Override
     public void nextGEQ(int docId) {
+        if(docId() >= docId){
+            return;
+        }
+        if(blockDescriptor.getMaxDocId() >= docId){
+            for(++currentIndexPostings; currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++,frequenciesIndex++){
+                if(docIds.get(currentIndexPostings) >= docId)
+                    return;
+            }
+        }else{
+            while (true) {
+                try{
+                    currentIndexPostings = blockDescriptor.getNumberOfPostings();
+                    frequenciesIndex = startNextFrequencyBlock;
+                    int blockMaxId = docIds.get(currentIndexPostings);
+                    blockDescriptor = new BlockDescriptor(blockMaxId,2 + blockDescriptor.getNumberOfPostings() + docIds.get(++currentIndexPostings));
+                    startNextFrequencyBlock += docIds.get(currentIndexPostings);
+                    if(blockMaxId >= docId){
+                        for(++currentIndexPostings; currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++){
+                            if(docIds.get(currentIndexPostings) >= docId)
+                                return;
+                        }
+                    }
+                }catch (IndexOutOfBoundsException ie){
+                    currentIndexPostings = Integer.MAX_VALUE;
+                    frequenciesIndex = Integer.MAX_VALUE;
+                    break;
+                }
+            }
 
+        }
     }
 
     @Override
@@ -139,7 +231,7 @@ public class UncompressedPostingList extends PostingList{
         docIdBuffer.flip();
         freqBuffer.flip();
         offsets[0] += docStream.write(docIdBuffer);
-        offsets[1] += docStream.write(freqBuffer);
+        offsets[1] += freqStream.write(freqBuffer);
 
         return offsets;
     }
@@ -184,4 +276,15 @@ public class UncompressedPostingList extends PostingList{
         return offsets;
     }
 
+    public List<Integer> getDocIds() {
+        return docIds;
+    }
+
+    public List<Integer> getFrequencies() {
+        return frequencies;
+    }
+
+    public void setBlockDescriptor() {
+        blockDescriptor = new BlockDescriptor(docIds.get(docIds.size()-1),docIds.size());
+    }
 }

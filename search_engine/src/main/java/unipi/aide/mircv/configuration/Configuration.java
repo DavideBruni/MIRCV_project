@@ -96,5 +96,4 @@ public class Configuration {
 
     public static String getCachePath() {return CACHE_PATH;}
 
-    public static int getBlockSizeThreshold() { return BLOCK_SIZE_THRESHOLD;}
 }

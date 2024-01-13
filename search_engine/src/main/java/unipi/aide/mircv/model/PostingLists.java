@@ -72,6 +72,8 @@ public class PostingLists {
                 PostingList postingList = postings.get(token);
                 if (compressed){
                     postingList = new CompressedPostingList(postingList);
+                }else{
+                    ((UncompressedPostingList)postingList).setBlockDescriptor();
                 }
                 LexiconEntry lexiconEntry = Lexicon.getEntry(token,false);
                 lexiconEntry.setDocIdOffset(offsets[0]);

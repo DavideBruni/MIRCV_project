@@ -1,14 +1,9 @@
 package unipi.aide.mircv.model;
 
 import unipi.aide.mircv.configuration.Configuration;
-import unipi.aide.mircv.exceptions.DocumentNotFoundException;
-import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.*;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 public abstract class PostingList{
 
@@ -16,7 +11,7 @@ public abstract class PostingList{
     protected static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     protected BlockDescriptor blockDescriptor;
     protected LexiconEntry lexiconEntry;
-    protected int currentIndex;
+    protected int currentIndexPostings;
 
 
     public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset, boolean compressed) throws FileNotFoundException{
@@ -39,7 +34,7 @@ public abstract class PostingList{
     /**f
      * Advances to the next document in the PostingList, updating the internal state.
      */
-    public abstract void next() throws IOException;
+    public abstract void next();
 
     public static PostingList loadFromDisk(String term) throws IOException {
         LexiconEntry lexiconEntry = Lexicon.getEntry(term, true);

@@ -2,27 +2,44 @@ package unipi.aide.mircv.model;
 
 import org.apache.commons.lang3.ArrayUtils;
 import unipi.aide.mircv.configuration.Configuration;
-import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.exceptions.DocumentNotFoundException;
+import unipi.aide.mircv.queryProcessor.Scorer;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.security.InvalidParameterException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.List;
 
 public class CompressedPostingList extends PostingList {
     byte[] compressedIds;
     byte[] compressedFrequencies;
-
-    public CompressedPostingList() {}
+    private int currentStartIndexDocIds;
+    private int currentStartFrequencies;
+    // the following attributes are linked to the compression, they shouldn't be put in this class,
+    // but at the same time they are linked to the single posting list, so they are put her for this reason
+    private int previous1BitCache = -1;
+    private int highBitsOffsetCache = -1;
+    private int currentFrequencyIndex = 0;
 
     public CompressedPostingList(PostingList postingList) {
-        blockDescriptor = new BlockDescriptor(postingList.blockDescriptor);
+        if(postingList.blockDescriptor != null)
+            blockDescriptor = new BlockDescriptor(postingList.blockDescriptor);
+        else {
+            if(postingList instanceof UncompressedPostingList) {
+                UncompressedPostingList tmp = (UncompressedPostingList) postingList;
+                blockDescriptor = new BlockDescriptor(tmp.docIds.get(tmp.docIds.size() - 1), tmp.docIds.size());
+            }
+            else
+                throw new InvalidParameterException("Block descriptor is null and posting list passed as argument is already compressed");
+        }
 
         if(postingList instanceof UncompressedPostingList){
             int maxDocId = blockDescriptor.getMaxDocId();
@@ -50,7 +67,8 @@ public class CompressedPostingList extends PostingList {
         compressedIds = docIds;
         compressedFrequencies = frequencies;
         blockDescriptor = firstBlockDescriptor;
-        currentIndex = 0;
+        currentIndexPostings = 0;
+        currentStartIndexDocIds = 0;
     }
 
     public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset) {
@@ -62,12 +80,15 @@ public class CompressedPostingList extends PostingList {
         {
             docStream.position(docIdOffset);
             freqStream.position(frequencyOffset);
-            docStream.position(docIdOffset);
-            freqStream.position(frequencyOffset);
+
             ByteBuffer blockInfoBuffer = ByteBuffer.allocateDirect(2*Integer.BYTES);
             docStream.read(blockInfoBuffer);
             blockInfoBuffer.flip();
-            BlockDescriptor blockDescriptor = new BlockDescriptor(blockInfoBuffer.getInt(),blockInfoBuffer.getInt());
+            ByteBuffer nextBlockAddress = ByteBuffer.allocateDirect(Integer.BYTES);
+            freqStream.read(nextBlockAddress);
+            nextBlockAddress.flip();
+            BlockDescriptor blockDescriptor = new BlockDescriptor(blockInfoBuffer.getInt(),blockInfoBuffer.getInt(), nextBlockAddress.getInt());
+
             int maxDocId = blockDescriptor.getMaxDocId();
             int numberOfPostings = blockDescriptor.getNumberOfPostings();
             ByteBuffer bufferDocIds = ByteBuffer.allocateDirect(EliasFano.getCompressedSize(maxDocId,numberOfPostings));
@@ -77,11 +98,12 @@ public class CompressedPostingList extends PostingList {
             byte [] buffer = new byte[len];
             bufferDocIds.get(buffer);
             List<Integer> documentIds = EliasFano.decompress(buffer,numberOfPostings,maxDocId);
-            List<Integer> freqs = UnaryCompressor.readFrequencies(freqStream,frequencyOffset,numberOfPostings);
+
+            List<Integer> freqs = UnaryCompressor.readFrequencies(freqStream,frequencyOffset+Integer.BYTES,numberOfPostings);
             res = new UncompressedPostingList(documentIds,freqs,blockDescriptor);
 
         } catch (IOException e) {
-            CustomLogger.error("Error while retrieving posting list: "+e.getMessage());
+            System.out.println("Error while retrieving posting list: "+e.getMessage());
         }
         return res;
     }
@@ -125,20 +147,23 @@ public class CompressedPostingList extends PostingList {
         try (FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIdsPath()));
              FileChannel freqStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getFrequencyPath()))){
 
+            docStream.position(lexiconEntry.getDocIdOffset());
+            freqStream.position(lexiconEntry.getFrequencyOffset());
+
             ByteBuffer docIdBuffer = ByteBuffer.allocateDirect(lexiconEntry.getDocIdLength());
             ByteBuffer freqBuffer = ByteBuffer.allocateDirect(lexiconEntry.getFrequencyLength());
 
             byte [] docIds = new byte [lexiconEntry.getDocIdLength() - 2*Integer.BYTES];
             byte [] frequencies = new byte [lexiconEntry.getFrequencyLength() - Integer.BYTES];
 
-
             docStream.read(docIdBuffer);
             docIdBuffer.flip();
 
             freqStream.read(freqBuffer);
             freqBuffer.flip();
-
-            BlockDescriptor firstBlockDescriptor = new BlockDescriptor(docIdBuffer.getInt(),docIdBuffer.getInt(),freqBuffer.getInt());
+            int maxDocId = docIdBuffer.getInt();
+            int n = docIdBuffer.getInt();
+            BlockDescriptor firstBlockDescriptor = new BlockDescriptor(maxDocId,n,freqBuffer.getInt(),EliasFano.getCompressedSize(maxDocId,n)+8);
 
             docIdBuffer.get(docIds);
             freqBuffer.get(frequencies);
@@ -159,37 +184,102 @@ public class CompressedPostingList extends PostingList {
         docIdBuffer.flip();
         offsets[0] += docStream.write(docIdBuffer);
 
+        ByteBuffer blockFrequenciesInfo = ByteBuffer.allocateDirect(Integer.BYTES);
+        blockFrequenciesInfo.putInt(compressedFrequencies.length);
+        blockFrequenciesInfo.flip();
+        offsets[1] += freqStream.write(blockFrequenciesInfo);
+
         ByteBuffer freqBuffer = ByteBuffer.allocateDirect(compressedFrequencies.length);
         freqBuffer.put(compressedFrequencies);
         freqBuffer.flip();
-        offsets[1] += docStream.write(freqBuffer);
+        offsets[1] += freqStream.write(freqBuffer);
 
         return offsets;
     }
 
     @Override
-    public void add(int docId, int frequency) {
-
-    }
+    public void add(int docId, int frequency) {}
 
     @Override
     public int docId() {
-        return 0;
+        if(currentIndexPostings == Integer.MAX_VALUE)
+            return Integer.MAX_VALUE;
+        int[] tmp_res = EliasFano.get(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(), currentIndexPostings, highBitsOffsetCache, previous1BitCache);
+        highBitsOffsetCache = -1;
+        previous1BitCache = -1;
+        return tmp_res[0];
     }
 
     @Override
     public double score() {
-        return 0;
+        int tf = UnaryCompressor.get(compressedIds,currentIndexPostings, currentFrequencyIndex);
+        if(Configuration.getScoreStandard().equals("BM25")){
+            try {
+                int[] tmp_res = EliasFano.get(compressedIds,blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(),currentIndexPostings, highBitsOffsetCache, previous1BitCache);
+                highBitsOffsetCache = -1;
+                previous1BitCache = -1;
+                return Scorer.BM25_singleTermDocumentScore(tf,tmp_res[0],lexiconEntry.getIdf());
+            } catch (DocumentNotFoundException e) {
+                System.out.println(e.getMessage());
+                return 0;
+            }
+        }else{
+            return Scorer.TFIDF_singleTermDocumentScore(tf,lexiconEntry.getIdf());
+        }
     }
 
     @Override
-    public void next() throws IOException {
-
+    public void next(){
+        if(++currentIndexPostings == blockDescriptor.getNumberOfPostings()){
+            try{
+                int start_next_block = currentStartIndexDocIds + EliasFano.getCompressedSize(blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings());
+                int start_next_freq_block = currentStartFrequencies + blockDescriptor.getNextFrequenciesOffset();
+                blockDescriptor = new BlockDescriptor(blockDescriptor,Arrays.copyOfRange(compressedIds,start_next_block,start_next_block+8),Arrays.copyOfRange(compressedFrequencies,start_next_freq_block,start_next_freq_block+4));
+                currentStartIndexDocIds = start_next_block + 8;
+                currentStartFrequencies = start_next_freq_block +4;
+                currentIndexPostings = 0;
+                resetIndexes();
+            }catch (IndexOutOfBoundsException | BufferUnderflowException e){
+                currentIndexPostings = Integer.MAX_VALUE;
+            }
+        }
     }
 
     @Override
     public void nextGEQ(int docId) {
+        if(docId() >= docId){
+            return;
+        }
+        if(blockDescriptor.getMaxDocId() >= docId){
+            currentIndexPostings = EliasFano.nextGEQ(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getNumberOfPostings(),blockDescriptor.getMaxDocId(),docId);
+        }else{
+            try {
+                while (true) {
+                    try{
+                        int start_next_block = currentStartIndexDocIds + EliasFano.getCompressedSize(blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings());
+                        int start_next_freq_block = currentStartFrequencies + blockDescriptor.getNextFrequenciesOffset();
+                        blockDescriptor = new BlockDescriptor(blockDescriptor,Arrays.copyOfRange(compressedIds,start_next_block,start_next_block+8),Arrays.copyOfRange(compressedFrequencies,start_next_freq_block,start_next_freq_block+4));
+                        currentStartIndexDocIds = start_next_block + 8;
+                        currentStartFrequencies = start_next_freq_block +4;
+                        if(blockDescriptor.getMaxDocId() >=docId){
+                            currentIndexPostings = EliasFano.nextGEQ(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getNumberOfPostings(),blockDescriptor.getMaxDocId(),docId);
+                            resetIndexes();
+                            break;
+                        }
+                    }catch (IndexOutOfBoundsException ie){
+                        currentIndexPostings = Integer.MAX_VALUE;
+                        break;
+                    }
+                }
+            }catch (IndexOutOfBoundsException ie){
+                currentIndexPostings = Integer.MAX_VALUE;
+            }
+        }
+    }
 
+    private void resetIndexes() {
+        currentFrequencyIndex = 0;
+        highBitsOffsetCache = previous1BitCache = -1;
     }
 
 }

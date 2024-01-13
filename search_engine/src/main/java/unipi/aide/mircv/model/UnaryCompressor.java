@@ -10,7 +10,6 @@ import org.apache.commons.lang3.ArrayUtils;
 
 public class UnaryCompressor {
 
-    private static int currentFrequencyIndex = 0;
 
     public static List<BitSet> compress(List<Integer> frequencies) {
         List<BitSet> res = new ArrayList<>();
@@ -74,9 +73,9 @@ public class UnaryCompressor {
         return frequencies;
     }
 
-    public static int get(byte[] compressedIds, int index) {
+    public static int get(byte[] compressedIds, int index, int currentFrequencyIndex) {
         int number = 0;
-        for(int i = currentFrequencyIndex; i<=index; i++) {       // from lastDecompressNumber, to the actual one
+        for(; currentFrequencyIndex<=index; currentFrequencyIndex++) {       // from lastDecompressNumber, to the actual one
             number = 0;
             for (; index < compressedIds.length; index++) {
                 int bitsSet = Integer.bitCount(compressedIds[index] & 0xFF);
@@ -90,6 +89,5 @@ public class UnaryCompressor {
         return number;
     }
 
-    public static void resetCurrentFrequencyIndex(){currentFrequencyIndex =0;}
 
 }

@@ -204,7 +204,7 @@ public class Lexicon implements Serializable{
                     stream.read(buffer);
                     buffer.flip();
                     return new LexiconEntry(buffer.getInt(), buffer.getDouble(), buffer.getInt(),
-                            buffer.getInt(), buffer.getDouble(), buffer.getDouble(),buffer.getInt(), is_merged);
+                            buffer.getInt(), buffer.getInt(), buffer.getInt(), buffer.getDouble(), buffer.getDouble());
                 } else if (compareResult < 0) {     // current entry is lower than target one
                     low = mid + 1;
                 } else {                // current entry is greater than target one

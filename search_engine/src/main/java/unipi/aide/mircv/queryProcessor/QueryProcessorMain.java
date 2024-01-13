@@ -2,7 +2,6 @@ package unipi.aide.mircv.queryProcessor;
 
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.MissingCollectionStatisticException;
-import unipi.aide.mircv.helpers.StreamHelper;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.*;
 import unipi.aide.mircv.parsing.Parser;
@@ -12,8 +11,6 @@ import java.io.*;
 import java.util.*;
 
 public class QueryProcessorMain {
-    private static final int RESULTS_CACHE_CAPACITY = 100;
-    private static final String SEARCH_RESULT_CACHE_FILENAME = "searchResult.dat";
     public static void main( String[] args ){
         if (args.length < 5 ) {
             System.err.println("Error in input parameters, parameters are:");
@@ -128,6 +125,7 @@ public class QueryProcessorMain {
             try {
                 postingList = PostingList.loadFromDisk(term);
             } catch (IOException e) {
+                System.out.println(e.getMessage());
                 continue;               // aggiungi stampa
             }
             if(postingList != null)

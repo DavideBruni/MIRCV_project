@@ -26,13 +26,15 @@ public class LexiconEntry implements Serializable {
         df = 1;
     }
 
-    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, double BM25_termUpperBound,double TFIDF_termUpperBound, int number, boolean is_merged) {
+    public LexiconEntry(int df, double idf, int docIdOffset, int frequencyOffset, int docIdLength, int frequencyLength, double BM25_termUpperBound,double TFIDF_termUpperBound) {
         this.df = df;
         this.idf = idf;
         this.docIdOffset = docIdOffset;
         this.frequencyOffset = frequencyOffset;
         this.BM25_termUpperBound = BM25_termUpperBound;
         this.TFIDF_termUpperBound = TFIDF_termUpperBound;
+        this.docIdLength = docIdLength;
+        this.frequencyLength = frequencyLength;
     }
 
     public static int getEntryDimension(boolean is_merged) {
@@ -87,9 +89,6 @@ public class LexiconEntry implements Serializable {
         this.TFIDF_termUpperBound = TFIDF_termUpperBound;
     }
 
-    public double getTFIDF_termUpperBound() {
-        return TFIDF_termUpperBound;
-    }
 
     @Override
     public String toString() {
