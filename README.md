@@ -18,6 +18,6 @@ In the project directory, you will find two JAR files:
    - **Expected Parameters:** Define the required parameters.
 
 ## Acknowledgments and Thanks 🙌
-Special thanks to [https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.txt](#https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.txt) for providing the stopwords.txt file and [(https://github.com/caarmen)](#https://github.com/caarmen/porter-stemmer/tree/master) for the stemmer used in this project.
+Special thanks to [https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.txt](https://raw.githubusercontent.com/stopwords-iso/stopwords-en/master/stopwords-en.txt) for providing the stopwords.txt file and [(https://github.com/caarmen)](https://github.com/caarmen/porter-stemmer/tree/master) for the Porter stemmer used in this project.
 
 Feel free to explore, contribute, and enhance the MIRCV_project! 🚀
