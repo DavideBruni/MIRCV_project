@@ -1,21 +1,18 @@
 package unipi.aide.mircv.configuration;
 
 public class Configuration {
-    private static final int BLOCK_SIZE_THRESHOLD = 2048;
-    private static String SCORE_STANDARD = "IDF";
+    private static String SCORE_STANDARD = "TFIDF";     // score standard, TFIDF is used as default
     private static boolean COMPRESSED;
     private static int MINHEAP_DIMENSION;
 
+    /** ----------------------------------- PATHS ----------------------------------- **/
     private static String ROOT_DIRECTORY = "data";
     private static String DOCUMENT_IDS_PATH = ROOT_DIRECTORY+"/invertedIndex/document_ids.dat";
     private static String FREQUENCY_PATH = ROOT_DIRECTORY+"/invertedIndex/frequencies.dat";
     private static String LEXICON_PATH = ROOT_DIRECTORY+"/invertedIndex/lexicon.dat";
     private static String COLLECTION_STATISTICS_PATH = ROOT_DIRECTORY+"/invertedIndex/collectionStatistics.dat";
-    private static String SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/";
     private static String DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/";
-    private static String CACHE_PATH = ROOT_DIRECTORY+"/cache/postingLists.dat";
     public static final int BLOCK_TRESHOLD = 2048;
-    private static boolean cache = false;
 
 
     public static boolean isCOMPRESSED() {
@@ -45,9 +42,7 @@ public class Configuration {
         FREQUENCY_PATH = ROOT_DIRECTORY+"/invertedIndex/frequencies.dat";
         LEXICON_PATH = ROOT_DIRECTORY+"/invertedIndex/lexicon.dat";
         COLLECTION_STATISTICS_PATH = ROOT_DIRECTORY+"/invertedIndex/collectionStatistics.dat";
-        SKIP_POINTERS_PATH = ROOT_DIRECTORY+"/invertedIndex/skipPointers.dat";
         DOCUMENT_INDEX_PATH = ROOT_DIRECTORY+"/invertedIndex/";
-        CACHE_PATH = ROOT_DIRECTORY+"/cache/postingLists.dat";
     }
 
     public static String getDocumentIdsPath() {
@@ -70,21 +65,11 @@ public class Configuration {
         return COLLECTION_STATISTICS_PATH;
     }
 
-    public static String getSkipPointersPath() {
-        return SKIP_POINTERS_PATH;
-    }
 
     public static String getDocumentIndexPath() {
         return DOCUMENT_INDEX_PATH;
     }
 
-    public static boolean getCache() {
-        return cache;
-    }
-
-    public static void setCache() {
-        cache = true;
-    }
 
     public static String getScoreStandard() {
         return SCORE_STANDARD;
@@ -94,6 +79,5 @@ public class Configuration {
         SCORE_STANDARD = standard;
     }
 
-    public static String getCachePath() {return CACHE_PATH;}
 
 }

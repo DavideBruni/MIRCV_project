@@ -40,13 +40,15 @@ public class BlockDescriptor {
 
     public BlockDescriptor(BlockDescriptor blockDescriptor, byte[] docIdsDescriptor, byte[] frequenciesDescriptor) {
         ByteBuffer docBuffer = ByteBuffer.wrap(docIdsDescriptor);
-        docBuffer.flip();
         maxDocId = docBuffer.getInt();
+        if(maxDocId==0){
+            numberOfPostings = nextFrequenciesOffset = indexNextBlockDocIds =0;
+            return;
+        }
         numberOfPostings = docBuffer.getInt();
         indexNextBlockDocIds = blockDescriptor.indexNextBlockDocIds + EliasFano.getCompressedSize(maxDocId,numberOfPostings) + 8;
 
         ByteBuffer freqBuffer = ByteBuffer.wrap(frequenciesDescriptor);
-        freqBuffer.flip();
         nextFrequenciesOffset = blockDescriptor.nextFrequenciesOffset + freqBuffer.getInt() + 4;
     }
 
@@ -68,5 +70,9 @@ public class BlockDescriptor {
         buffer.putInt(numberOfPostings);
         buffer.flip();
         return docStream.write(buffer);
+    }
+
+    public int getIndexNextBlockFrequencies() {
+        return nextFrequenciesOffset;
     }
 }

@@ -13,7 +13,11 @@ public class EliasFano {
 	static long roundUp(long val, final long den) {
 
 		val = val == 0 ? den : val;
-		return (val % den == 0) ? val : val + (den - (val % den));
+		try {
+			return (val % den == 0) ? val : val + (den - (val % den));
+		}catch (ArithmeticException e){
+			return 0;
+		}
 
 	}
 
@@ -123,7 +127,11 @@ public class EliasFano {
 
 		while (_1Bits <= idx) {
 			previous1BitCache = _1Bits;
-			_1Bits += Integer.bitCount(in[highBitsOffsetCache++] & 0xFF);
+			try {
+				_1Bits += Integer.bitCount(in[highBitsOffsetCache++] & 0xFF);
+			}catch (IndexOutOfBoundsException e){
+				System.out.println("No");
+			}
 		}
 		highBitsOffsetCache--; // rollback
 		int delta = ((highBitsOffsetCache - startOffset) * Byte.SIZE) - previous1BitCache; // delta
@@ -140,7 +148,7 @@ public class EliasFano {
 
 	public static int nextGEQ(final byte[] in, final int length, final int maxDocId, final int val) {
 
-		int l = getL(length,maxDocId);
+		int l = getL(maxDocId,length);
 		final long highBitsOffset = roundUp(l * length, Byte.SIZE);
 
 		final int h = val >>> l;

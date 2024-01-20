@@ -5,7 +5,6 @@ import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.model.*;
 
-import java.io.Serializable;
 import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
@@ -26,26 +25,28 @@ public class Scorer {
      */
     public static double BM25_singleTermDocumentScore(int tf, int docId, double idf) throws DocumentNotFoundException,ArithmeticException {
         int documentLength = DocumentIndex.getDocumentLength(docId);
-        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
-        return (tf / (NORMALIZATION_PARAMETER_K1*((1-NORMALIZATION_PARAMETER_B) + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
+        double averageDocumentLength = CollectionStatistics.getAverageDocumentLength();
+        double Bj = NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength));
+        return (tf / ((NORMALIZATION_PARAMETER_K1*Bj) + tf)) * idf;
     }
 
     public static double TFIDF_singleTermDocumentScore(int tf, double idf) {
-        return (1+ Math.log(tf))*idf;
+        return (1+ Math.log10(tf))*idf;
     }
 
     public static double[] calculateTermUpperBounds(UncompressedPostingList postingList, double idf){
         double BM25_maxScore = 0.0;
         double TFIDF_maxScore = 0.0;
-        double averageDocumentLength = CollectionStatistics.getDocumentsLen() / (double) CollectionStatistics.getCollectionSize();
+        double averageDocumentLength = CollectionStatistics.getAverageDocumentLength();
         List<Integer> docIds = postingList.getDocIds();
         List<Integer> frequencies = postingList.getFrequencies();
         for(int i = 0; i<docIds.size(); i++){
             int tf = frequencies.get(i);
             try {
                 int documentLength = DocumentIndex.getDocumentLength(docIds.get(i));
-                double BM25_score = (tf / (NORMALIZATION_PARAMETER_K1*(NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength))) + tf)) * idf;
-                double TFIDF_score = (1+Math.log(tf))*idf;
+                double Bj = NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength));
+                double BM25_score = (tf / ((NORMALIZATION_PARAMETER_K1*Bj) + tf)) * idf;
+                double TFIDF_score = (1+Math.log10(tf))*idf;
                 BM25_maxScore = Math.max(BM25_maxScore, BM25_score);
                 TFIDF_maxScore = Math.max(TFIDF_maxScore, TFIDF_score);
             } catch (DocumentNotFoundException e) {
@@ -80,42 +81,29 @@ public class Scorer {
         int pivot = 0;
         int current = minimumDocid(postingLists);
 
-        while (pivot < postingLists.length && current != Integer.MAX_VALUE-1) {
+        while (pivot < postingLists.length && current != Integer.MAX_VALUE) {
             double score = 0;
-            int next = Integer.MAX_VALUE - 1;
+            int next = Integer.MAX_VALUE;
 
             for (int i = pivot; i <postingLists.length; i++) { // Essential lists
                 if (postingLists[i].docId() == current) {
                     score += postingLists[i].score();
-                    try {
-                        postingLists[i].next();
-                    }catch (Exception e){
-                        CustomLogger.error("Error calling next() function: "+e.getMessage());
-                    }
+                    postingLists[i].next();
                 } else if (conjunctiveQuery) {      // we have a postingList without the doc with minDocIdUsed
                     current = -1;       // we don't have to consider this document anymore
                     score = 0;
                 }
                 if(conjunctiveQuery && current!=-1) {
-                    try {
-                        postingLists[i].next();
-                    } catch (Exception e) {
-                        CustomLogger.error("Error calling next() function: " + e.getMessage());
-                    }
+                    postingLists[i].next();
                 }
-                    if (postingLists[i].docId() < next) {       // if the current docId is lower than the candidate next, update the candidate next
-                        next = postingLists[i].docId();
-                    }
+                next = Math.min(next, postingLists[i].docId());
             }
-
 
             for (int i = pivot - 1; i >= 0; i--) { // Non-essential lists
                 if (score + upperBounds[i] <= theta) {
                     break;
                 }
-
                 postingLists[i].nextGEQ(current);
-
                 if (postingLists[i].docId() == current) {
                     score += postingLists[i].score();
                 } else if (conjunctiveQuery) {
@@ -155,7 +143,7 @@ public class Scorer {
         return minDocid;
     }
 
-    static class DocScorePair implements Comparable, Serializable {
+    static class DocScorePair implements Comparable {
         private int docid;
         private double score;
         private String pid;
@@ -192,7 +180,7 @@ public class Scorer {
             if(pid == null){
                 pid = DocumentIndex.getDocno(docid);
             }
-            return  pid;
+            return  pid + "\t" +String.valueOf(score);
         }
 
 

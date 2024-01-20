@@ -145,19 +145,18 @@ public class InvertedIndex {
                         }
                     }
                 }
-                idf = Math.log(CollectionStatistics.getCollectionSize() / (double) df);
+                idf = Math.log10(CollectionStatistics.getCollectionSize() / (double) df);
                 lexiconEntry.setDf(df);
                 lexiconEntry.setIdf(idf);
+                lexiconEntry.setDocIdOffset(start_positions[0]);
+                lexiconEntry.setFrequencyOffset(start_positions[1]);
                 double[] scores;
                 UncompressedPostingList notWrittenYetPostings = new UncompressedPostingList();
-
                 for (int i = 0; i < partialLexiconEntries.length; i++) {
                     if (lowestTokens[i] != null && lowestTokens[i].equals(token)) {
                         LexiconEntry tmp = partialLexiconEntries[i];
                         UncompressedPostingList partialPostingList = PostingList.readFromDisk(i, tmp.getDocIdOffset(),
                                 tmp.getFrequencyOffset(), Configuration.isCOMPRESSED());
-                        lexiconEntry.setDocIdOffset(offsets[0]);
-                        lexiconEntry.setFrequencyOffset(offsets[1]);
                         offsets = partialPostingList.writeToDiskMerged(docStream, freqStream, offsets, df, notWrittenYetPostings, maxDocId);
                         scores = Scorer.calculateTermUpperBounds(partialPostingList, idf);
                         BM25_ub = Math.max(BM25_ub, scores[0]);
@@ -165,7 +164,6 @@ public class InvertedIndex {
                         lowestTokens[i] = null;
                     }
                 }
-
                 offsets = notWrittenYetPostings.writeToDiskMerged(docStream, freqStream, offsets, df, null, maxDocId);
                 scores = Scorer.calculateTermUpperBounds(notWrittenYetPostings, idf);
                 BM25_ub = Math.max(BM25_ub, scores[0]);
@@ -233,16 +231,6 @@ public class InvertedIndex {
         if(!allDocumentProcessed){
             CustomLogger.error("Index Creation aborted, read the log to find the cause");
         }else{
-
-/*
-        try {
-            CollectionStatistics.readFromDisk();
-        } catch (MissingCollectionStatisticException e) {
-            throw new RuntimeException(e);
-        }
-        Lexicon lexicon = Lexicon.getInstance();
-
- */
 
         Merge(debug);
         CollectionStatistics.writeToDisk();

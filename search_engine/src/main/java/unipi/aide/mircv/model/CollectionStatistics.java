@@ -55,8 +55,6 @@ public class CollectionStatistics {
     }
 
 
-    public static long getDocumentsLen() { return documentsLen; }
-
 
     public static void updateNumberOfToken(long value) {
         numberOfTokens = numberOfTokens + value;
@@ -70,4 +68,6 @@ public class CollectionStatistics {
                 "\n documentsLen: "+documentsLen+
                 "\n: numberOfTokens: "+numberOfTokens);
     }
+
+    public static double getAverageDocumentLength() { return documentsLen/(double)collectionSize;}
 }

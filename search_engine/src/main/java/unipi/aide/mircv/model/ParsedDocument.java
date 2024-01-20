@@ -11,10 +11,6 @@ public class ParsedDocument {
         this.tokens = tokens;
     }
 
-    public String getPid() {
-        return pid;
-    }
-
     public List<String> getTokens() {
         return tokens;
     }

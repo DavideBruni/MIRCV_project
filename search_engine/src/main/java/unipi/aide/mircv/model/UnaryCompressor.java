@@ -64,29 +64,32 @@ public class UnaryCompressor {
         }
     }
 
-    public static List<Integer> readFrequencies(FileChannel freqStream, int frequencyOffset, int numberOfPostings) throws IOException {
+    public static List<Integer> readFrequencies(FileChannel freqStream, int numberOfPostings) throws IOException {
         List<Integer> frequencies = new ArrayList<>();
-        freqStream.position(frequencyOffset);
         for(int i = 0; i<numberOfPostings; i++){
             frequencies.add(readNumber(freqStream));
         }
         return frequencies;
     }
 
-    public static int get(byte[] compressedIds, int index, int currentFrequencyIndex) {
+    public static int[] get(byte[] compressedIds, int index, int lastReadFrequency, int currentFrequencyIndex) {
         int number = 0;
-        for(; currentFrequencyIndex<=index; currentFrequencyIndex++) {       // from lastDecompressNumber, to the actual one
+        for(; lastReadFrequency<index; lastReadFrequency++) {       // from lastDecompressNumber, to the actual one
             number = 0;
-            for (; index < compressedIds.length; index++) {
-                int bitsSet = Integer.bitCount(compressedIds[index] & 0xFF);
-                if (bitsSet == 0)
+            for (; currentFrequencyIndex<compressedIds.length; currentFrequencyIndex++) {
+                int bitsSet = Integer.bitCount(compressedIds[currentFrequencyIndex] & 0xFF);
+                if (bitsSet == 0) {
+                    currentFrequencyIndex++;
                     break;
+                }
                 number += bitsSet;
-                if (compressedIds[index] % 2 == 0)        // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
+                if (compressedIds[currentFrequencyIndex] % 2 == 0) {      // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
+                    currentFrequencyIndex++;
                     break;
+                }
             }
         }
-        return number;
+        return new int[] {number,currentFrequencyIndex};
     }
 
 

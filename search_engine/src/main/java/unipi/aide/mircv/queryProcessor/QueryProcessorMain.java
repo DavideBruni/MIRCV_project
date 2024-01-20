@@ -46,7 +46,6 @@ public class QueryProcessorMain {
             Scanner scanner = new Scanner(System.in);
             while (true) {
                 boolean is_cunjuctive = false;
-                boolean add_result_to_cache = true;
 
                 System.out.println("Insert new query\n");
                 // Read query from stdin
@@ -70,8 +69,9 @@ public class QueryProcessorMain {
                 if (queryResult == null) {
                     System.out.println("No results found! \n\n");
                 } else {
-                    for(Scorer.DocScorePair tmp : queryResult)
-                        System.out.println(tmp);
+                    while (!queryResult.isEmpty()) {
+                        System.out.println(queryResult.poll());
+                    }
                 }
                 System.out.println("(" + (timestamp_stop - timestamp_start) + " milliseconds )");
 
@@ -83,8 +83,14 @@ public class QueryProcessorMain {
 
     private static void evaluation(boolean parse) {
         List<String> results = new ArrayList<>();
-
-        try (BufferedReader br = new BufferedReader(new FileReader("msmarco-test2020-queries.tsv"))) {
+        List<Long> times = new ArrayList<>();
+        String filename = "qres_"+Configuration.getScoreStandard()+"_";
+        if (parse)
+            filename += "parsed.txt";
+        else
+            filename += "not_parsed.txt";
+        try (BufferedReader br = new BufferedReader(new FileReader("msmarco-test2019-queries.tsv"));
+             BufferedWriter resultStream = new BufferedWriter(new FileWriter(filename))) {
             String line;
             while ((line = br.readLine()) != null) {
                 String[] parts = line.split("\t");
@@ -92,25 +98,26 @@ public class QueryProcessorMain {
                     String id = parts[0];
                     String query = parts[1];
                     List<String> parsedQuery = Parser.getTokens(query, parse);
+                    long start = System.currentTimeMillis();
                     Collections.sort(parsedQuery);
                     PriorityQueue<Scorer.DocScorePair> queryResult = queryHandler(parsedQuery,false);
+                    long stop = System.currentTimeMillis();
+                    times.add(stop - start);
                     int i = 1;
-                    for(Scorer.DocScorePair result : queryResult){
+                    while (!queryResult.isEmpty()) {
+                        Scorer.DocScorePair result = queryResult.poll();
                         String resultLine = id + " Q0 " + result.getPid() + " "
-                                + i++ + " " + result.getScore() + " BM25";
-                        results.add(resultLine);
+                                + i++ + " " + result.getScore() + " "+Configuration.getScoreStandard();
+                        resultStream.write(resultLine);
+                        resultStream.newLine();
                     }
                 }
             }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-        try (BufferedWriter bw = new BufferedWriter(new FileWriter(Configuration.getCachePath()))) {
-            for (String resultLine : results) {
-                bw.write(resultLine);
-                bw.newLine();
+            long sum = 0;
+            for (Long value : times) {
+                sum += value;
             }
+            System.out.println("Avg time = " + sum/ times.size() +" ms");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

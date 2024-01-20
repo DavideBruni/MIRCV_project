@@ -6,7 +6,6 @@ import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.queryProcessor.Scorer;
 
 import java.io.IOException;
-import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
@@ -28,6 +27,7 @@ public class CompressedPostingList extends PostingList {
     private int previous1BitCache = -1;
     private int highBitsOffsetCache = -1;
     private int currentFrequencyIndex = 0;
+    private int lastFrequencyRead = -1;
 
     public CompressedPostingList(PostingList postingList) {
         if(postingList.blockDescriptor != null)
@@ -84,10 +84,10 @@ public class CompressedPostingList extends PostingList {
             ByteBuffer blockInfoBuffer = ByteBuffer.allocateDirect(2*Integer.BYTES);
             docStream.read(blockInfoBuffer);
             blockInfoBuffer.flip();
-            ByteBuffer nextBlockAddress = ByteBuffer.allocateDirect(Integer.BYTES);
-            freqStream.read(nextBlockAddress);
-            nextBlockAddress.flip();
-            BlockDescriptor blockDescriptor = new BlockDescriptor(blockInfoBuffer.getInt(),blockInfoBuffer.getInt(), nextBlockAddress.getInt());
+            ByteBuffer frequencyBlockLength = ByteBuffer.allocateDirect(Integer.BYTES);
+            freqStream.read(frequencyBlockLength);
+            frequencyBlockLength.flip();
+            BlockDescriptor blockDescriptor = new BlockDescriptor(blockInfoBuffer.getInt(),blockInfoBuffer.getInt(), frequencyBlockLength.getInt());
 
             int maxDocId = blockDescriptor.getMaxDocId();
             int numberOfPostings = blockDescriptor.getNumberOfPostings();
@@ -99,7 +99,7 @@ public class CompressedPostingList extends PostingList {
             bufferDocIds.get(buffer);
             List<Integer> documentIds = EliasFano.decompress(buffer,numberOfPostings,maxDocId);
 
-            List<Integer> freqs = UnaryCompressor.readFrequencies(freqStream,frequencyOffset+Integer.BYTES,numberOfPostings);
+            List<Integer> freqs = UnaryCompressor.readFrequencies(freqStream,numberOfPostings);
             res = new UncompressedPostingList(documentIds,freqs,blockDescriptor);
 
         } catch (IOException e) {
@@ -113,8 +113,12 @@ public class CompressedPostingList extends PostingList {
         int numBlocks = 1;
         int documentWritten = 0;
         if (blockSize > Configuration.BLOCK_TRESHOLD) {
-            blockSize = (int) Math.ceil(Math.sqrt(df));
-            numBlocks = uncompressedPostingList.frequencies.size() / blockSize;       // numero di blocchi presenti in questa lista
+            if(notWrittenYetPostings ==  null){
+                blockSize = uncompressedPostingList.docIds.size();
+            }else {
+                blockSize = (int) Math.sqrt(df);
+                numBlocks = uncompressedPostingList.frequencies.size() / blockSize;       // numero di blocchi presenti in questa lista
+            }
         } else {
             blockSize = df;
         }
@@ -126,8 +130,8 @@ public class CompressedPostingList extends PostingList {
                 UncompressedPostingList tmp = new UncompressedPostingList(docIds,frequencies);
                 CompressedPostingList compressedPostingList = new CompressedPostingList(tmp);
                 offsets = compressedPostingList.writeOnDisk(docStream,freqStream,offsets);
+                documentWritten +=docIds.size();
             }
-            documentWritten = numBlocks * blockSize;
         }
         if(notWrittenYetPostings != null) {
             if(documentWritten<uncompressedPostingList.docIds.size()){
@@ -153,17 +157,18 @@ public class CompressedPostingList extends PostingList {
             ByteBuffer docIdBuffer = ByteBuffer.allocateDirect(lexiconEntry.getDocIdLength());
             ByteBuffer freqBuffer = ByteBuffer.allocateDirect(lexiconEntry.getFrequencyLength());
 
-            byte [] docIds = new byte [lexiconEntry.getDocIdLength() - 2*Integer.BYTES];
-            byte [] frequencies = new byte [lexiconEntry.getFrequencyLength() - Integer.BYTES];
-
             docStream.read(docIdBuffer);
             docIdBuffer.flip();
 
             freqStream.read(freqBuffer);
             freqBuffer.flip();
+
+            byte [] docIds = new byte [lexiconEntry.getDocIdLength() - 2*Integer.BYTES];
+            byte [] frequencies = new byte [lexiconEntry.getFrequencyLength() - Integer.BYTES];
+
             int maxDocId = docIdBuffer.getInt();
             int n = docIdBuffer.getInt();
-            BlockDescriptor firstBlockDescriptor = new BlockDescriptor(maxDocId,n,freqBuffer.getInt(),EliasFano.getCompressedSize(maxDocId,n)+8);
+            BlockDescriptor firstBlockDescriptor = new BlockDescriptor(maxDocId,n,freqBuffer.getInt(),EliasFano.getCompressedSize(maxDocId,n));
 
             docIdBuffer.get(docIds);
             freqBuffer.get(frequencies);
@@ -171,7 +176,9 @@ public class CompressedPostingList extends PostingList {
             res = new CompressedPostingList(docIds,frequencies,firstBlockDescriptor);
             res.lexiconEntry = lexiconEntry;
         }catch (IOException e){
+            System.out.println("error");
         }
+
         return res;
     }
 
@@ -202,9 +209,12 @@ public class CompressedPostingList extends PostingList {
 
     @Override
     public int docId() {
-        if(currentIndexPostings == Integer.MAX_VALUE)
+        if(currentIndexPostings == Integer.MAX_VALUE || currentIndexPostings == -1)
             return Integer.MAX_VALUE;
-        int[] tmp_res = EliasFano.get(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(), currentIndexPostings, highBitsOffsetCache, previous1BitCache);
+        int[] tmp_res = EliasFano.get(
+                Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),
+                blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(),
+                currentIndexPostings, highBitsOffsetCache, previous1BitCache);
         highBitsOffsetCache = -1;
         previous1BitCache = -1;
         return tmp_res[0];
@@ -212,36 +222,48 @@ public class CompressedPostingList extends PostingList {
 
     @Override
     public double score() {
-        int tf = UnaryCompressor.get(compressedIds,currentIndexPostings, currentFrequencyIndex);
+        if(currentIndexPostings == Integer.MAX_VALUE || currentIndexPostings == -1)
+            return 0.0;
+        int[] res= UnaryCompressor.get(Arrays.copyOfRange(compressedFrequencies,currentStartFrequencies,blockDescriptor.getIndexNextBlockFrequencies()),currentIndexPostings, lastFrequencyRead, currentFrequencyIndex);
+        currentFrequencyIndex = res[1];
+        lastFrequencyRead = currentIndexPostings;
         if(Configuration.getScoreStandard().equals("BM25")){
             try {
-                int[] tmp_res = EliasFano.get(compressedIds,blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(),currentIndexPostings, highBitsOffsetCache, previous1BitCache);
+                int[] tmp_res = EliasFano.get(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings(),currentIndexPostings, highBitsOffsetCache, previous1BitCache);
                 highBitsOffsetCache = -1;
                 previous1BitCache = -1;
-                return Scorer.BM25_singleTermDocumentScore(tf,tmp_res[0],lexiconEntry.getIdf());
+                return Scorer.BM25_singleTermDocumentScore(res[0],tmp_res[0],lexiconEntry.getIdf());
             } catch (DocumentNotFoundException e) {
                 System.out.println(e.getMessage());
                 return 0;
             }
         }else{
-            return Scorer.TFIDF_singleTermDocumentScore(tf,lexiconEntry.getIdf());
+            return Scorer.TFIDF_singleTermDocumentScore(res[0],lexiconEntry.getIdf());
         }
     }
 
     @Override
     public void next(){
+        if(currentIndexPostings == Integer.MAX_VALUE)
+            return;
         if(++currentIndexPostings == blockDescriptor.getNumberOfPostings()){
-            try{
-                int start_next_block = currentStartIndexDocIds + EliasFano.getCompressedSize(blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings());
-                int start_next_freq_block = currentStartFrequencies + blockDescriptor.getNextFrequenciesOffset();
+                int start_next_block = blockDescriptor.getIndexNextBlockDocIds();
+                if(start_next_block >= compressedIds.length){
+                    currentIndexPostings = Integer.MAX_VALUE;
+                    currentFrequencyIndex = Integer.MAX_VALUE;
+                    return;
+                }
+                int start_next_freq_block = blockDescriptor.getNextFrequenciesOffset();
                 blockDescriptor = new BlockDescriptor(blockDescriptor,Arrays.copyOfRange(compressedIds,start_next_block,start_next_block+8),Arrays.copyOfRange(compressedFrequencies,start_next_freq_block,start_next_freq_block+4));
+                if (blockDescriptor.getMaxDocId()==0) {
+                    currentIndexPostings = Integer.MAX_VALUE;
+                    currentFrequencyIndex = Integer.MAX_VALUE;
+                    return;
+                }
                 currentStartIndexDocIds = start_next_block + 8;
                 currentStartFrequencies = start_next_freq_block +4;
                 currentIndexPostings = 0;
                 resetIndexes();
-            }catch (IndexOutOfBoundsException | BufferUnderflowException e){
-                currentIndexPostings = Integer.MAX_VALUE;
-            }
         }
     }
 
@@ -255,21 +277,20 @@ public class CompressedPostingList extends PostingList {
         }else{
             try {
                 while (true) {
-                    try{
-                        int start_next_block = currentStartIndexDocIds + EliasFano.getCompressedSize(blockDescriptor.getMaxDocId(),blockDescriptor.getNumberOfPostings());
-                        int start_next_freq_block = currentStartFrequencies + blockDescriptor.getNextFrequenciesOffset();
+                        int start_next_block = blockDescriptor.getIndexNextBlockDocIds();
+                        int start_next_freq_block = blockDescriptor.getNextFrequenciesOffset();
                         blockDescriptor = new BlockDescriptor(blockDescriptor,Arrays.copyOfRange(compressedIds,start_next_block,start_next_block+8),Arrays.copyOfRange(compressedFrequencies,start_next_freq_block,start_next_freq_block+4));
-                        currentStartIndexDocIds = start_next_block + 8;
-                        currentStartFrequencies = start_next_freq_block +4;
-                        if(blockDescriptor.getMaxDocId() >=docId){
-                            currentIndexPostings = EliasFano.nextGEQ(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getNumberOfPostings(),blockDescriptor.getMaxDocId(),docId);
-                            resetIndexes();
+                        if (blockDescriptor.getMaxDocId()==0) {
+                            currentIndexPostings = Integer.MAX_VALUE;
                             break;
                         }
-                    }catch (IndexOutOfBoundsException ie){
-                        currentIndexPostings = Integer.MAX_VALUE;
-                        break;
-                    }
+                        currentStartIndexDocIds = start_next_block + 8;
+                        currentStartFrequencies = start_next_freq_block +  4;
+                        if(blockDescriptor.getMaxDocId() >=docId){
+                            currentIndexPostings = EliasFano.nextGEQ(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getNumberOfPostings(),blockDescriptor.getMaxDocId(),docId);
+                            lastFrequencyRead = -1;
+                            break;
+                        }
                 }
             }catch (IndexOutOfBoundsException ie){
                 currentIndexPostings = Integer.MAX_VALUE;
@@ -279,7 +300,7 @@ public class CompressedPostingList extends PostingList {
 
     private void resetIndexes() {
         currentFrequencyIndex = 0;
-        highBitsOffsetCache = previous1BitCache = -1;
+        highBitsOffsetCache = previous1BitCache = lastFrequencyRead =  -1;
     }
 
 }

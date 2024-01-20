@@ -44,8 +44,10 @@ public class UncompressedPostingList extends PostingList{
 
     public UncompressedPostingList(List<Integer> blockDocIds, List<Integer> blockFrequencies) {
         blockDescriptor = new BlockDescriptor(blockDocIds.get(blockDocIds.size()-1),blockDocIds.size());
-        docIds = blockDocIds;
-        frequencies = blockFrequencies;
+        docIds = new ArrayList<>();
+        docIds.addAll(blockDocIds);
+        frequencies = new ArrayList<>();
+        frequencies.addAll(blockFrequencies);
     }
 
     public UncompressedPostingList(byte[] docIds, byte[] frequencies, BlockDescriptor firstBlockDescriptor) {
@@ -146,7 +148,7 @@ public class UncompressedPostingList extends PostingList{
 
     @Override
     public int docId() {
-        if(currentIndexPostings<blockDescriptor.getNumberOfPostings()){
+        if(currentIndexPostings<docIds.size()){
             return docIds.get(currentIndexPostings);
         }else{
             return Integer.MAX_VALUE;
@@ -163,7 +165,7 @@ public class UncompressedPostingList extends PostingList{
                 return 0;
             }
         }else{
-            return Scorer.TFIDF_singleTermDocumentScore(frequencies.get(frequenciesIndex),lexiconEntry.getIdf());
+            return Scorer.TFIDF_singleTermDocumentScore(frequencies.get(frequenciesIndex), lexiconEntry.getIdf());
         }
     }
 
@@ -172,8 +174,8 @@ public class UncompressedPostingList extends PostingList{
         if(++currentIndexPostings == blockDescriptor.getNumberOfPostings()){
             try{
                 // numberOfPosting is used as index limiter, so we have to consider also the 2 int of the block descriptor and the previous number of postings
-                blockDescriptor = new BlockDescriptor(docIds.get(currentIndexPostings++), 2 + blockDescriptor.getNumberOfPostings() + docIds.get(currentIndexPostings));
-                frequenciesIndex = startNextFrequencyBlock;
+                blockDescriptor = new BlockDescriptor(docIds.get(currentIndexPostings++), 1 + currentIndexPostings + docIds.get(currentIndexPostings));
+                frequenciesIndex++;
                 startNextFrequencyBlock += docIds.get(currentIndexPostings++);
 
             }catch (IndexOutOfBoundsException ie){
@@ -191,7 +193,7 @@ public class UncompressedPostingList extends PostingList{
             return;
         }
         if(blockDescriptor.getMaxDocId() >= docId){
-            for(++currentIndexPostings; currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++,frequenciesIndex++){
+            for(;currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++,frequenciesIndex++){
                 if(docIds.get(currentIndexPostings) >= docId)
                     return;
             }
@@ -200,11 +202,11 @@ public class UncompressedPostingList extends PostingList{
                 try{
                     currentIndexPostings = blockDescriptor.getNumberOfPostings();
                     frequenciesIndex = startNextFrequencyBlock;
-                    int blockMaxId = docIds.get(currentIndexPostings);
-                    blockDescriptor = new BlockDescriptor(blockMaxId,2 + blockDescriptor.getNumberOfPostings() + docIds.get(++currentIndexPostings));
-                    startNextFrequencyBlock += docIds.get(currentIndexPostings);
+                    int blockMaxId = docIds.get(currentIndexPostings++);
+                    blockDescriptor = new BlockDescriptor(blockMaxId,2 + blockDescriptor.getNumberOfPostings() + docIds.get(currentIndexPostings));
+                    startNextFrequencyBlock += docIds.get(currentIndexPostings++);
                     if(blockMaxId >= docId){
-                        for(++currentIndexPostings; currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++){
+                        for(; currentIndexPostings<blockDescriptor.getNumberOfPostings(); currentIndexPostings++,frequenciesIndex++){
                             if(docIds.get(currentIndexPostings) >= docId)
                                 return;
                         }
@@ -252,16 +254,20 @@ public class UncompressedPostingList extends PostingList{
             if (blockSize * Integer.BYTES > Configuration.BLOCK_TRESHOLD) {
                 blockSize = (int) Math.sqrt(df);
                 numBlocks = docIds.size() / blockSize;
+                if(numBlocks == 0 && notWrittenYetPostings == null){        // need to write the last part of block
+                    blockSize = docIds.size();
+                    numBlocks = 1;
+                }
             }
             if(!docIds.isEmpty() && !(docIds.size() < blockSize && notWrittenYetPostings != null)) {
                 // if not empty and (I have more than one block to be written or it's the last one)
                 for (int j = 0; j < numBlocks; j++) {
-                    List<Integer> blockDocIds = docIds.subList(j * blockSize, (j + 1) * blockSize);
-                    List<Integer> blockFrequencies = frequencies.subList(j * blockSize, (j + 1) * blockSize);
+                    List<Integer> blockDocIds = docIds.subList(j * blockSize, Math.min((j + 1) * blockSize,docIds.size()));
+                    List<Integer> blockFrequencies = frequencies.subList(j * blockSize, Math.min((j + 1) * blockSize,frequencies.size()));
                     UncompressedPostingList tmp = new UncompressedPostingList(blockDocIds,blockFrequencies);
                     offsets = tmp.writeOnDisk(docStream,freqStream,offsets);
+                    documentWritten +=blockDocIds.size();
                 }
-                documentWritten = numBlocks * blockSize;
             }
         }
         if(notWrittenYetPostings != null) {

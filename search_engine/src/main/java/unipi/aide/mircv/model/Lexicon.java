@@ -16,7 +16,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 import java.util.function.Function;
 
-public class Lexicon implements Serializable{
+public class Lexicon{
 
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
     private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
@@ -71,26 +71,24 @@ public class Lexicon implements Serializable{
      */
     public static String[] getTokens(String[] tokens, FileChannel[] partialLexiconStreams) throws PartialLexiconNotFoundException {
         for(int i =0; i< tokens.length; i++){
-            try {
-                if (tokens[i] == null && partialLexiconStreams[i].size() != partialLexiconStreams[i].position()){
-                    try {
-                        ByteBuffer tmp = ByteBuffer.allocateDirect(45);
-                        int len = partialLexiconStreams[i].read(tmp);
-                        tmp.flip();
-                        byte[] byteBuffer = new byte[45];
-                        tmp.get(byteBuffer);        // da errore, bufferunderFlowException, cerchiamo di capire i perchè, ma nemmeno sempre
-                        tokens[i] = new String(byteBuffer, 0, len);
-                        tokens[i] = tokens[i].trim();
-                    }catch(EOFException e){
-                        tokens[i] = null;
-                    } catch (IOException e) {
-                        throw new PartialLexiconNotFoundException(e.getMessage());
-                    }
-
+            if (tokens[i] == null){
+                try {
+                    ByteBuffer tmp = ByteBuffer.allocateDirect(45);
+                    int len = partialLexiconStreams[i].read(tmp);
+                    if (len < 0)
+                        throw new EOFException();
+                    tmp.flip();
+                    byte[] byteBuffer = new byte[45];
+                    tmp.get(byteBuffer);
+                    tokens[i] = new String(byteBuffer, 0, len);
+                    tokens[i] = tokens[i].trim();
+                }catch(EOFException e){
+                    tokens[i] = null;
+                } catch (IOException e) {
+                    throw new PartialLexiconNotFoundException(e.getMessage());
                 }
-            } catch (IOException e) {
-                throw new RuntimeException(e);
             }
+
         }
         return tokens;
     }
@@ -161,11 +159,8 @@ public class Lexicon implements Serializable{
                 res = instance.entries.get(token);
             if (res == null) {
                 res = getEntryFromDisk(token, is_merged);
-                if(Configuration.getCache()){
-                    instance.lexiconCache.put(token,res);
-                }else {
-                    instance.add(token, res);
-                }
+                instance.add(token, res);
+
             }
         }
         return res;

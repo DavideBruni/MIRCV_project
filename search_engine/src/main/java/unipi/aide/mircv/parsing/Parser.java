@@ -24,10 +24,9 @@ public class Parser {
     public static List<String> getTokens(String text, boolean parseFlag) {
         Pattern pattern = Pattern.compile("[^\\x00-\\x7F]+");       // this regex match all the invalid UTF-8 char
         text = text.replaceAll("<[^>]+>", " "); // Remove HTML
-        String[] punctuationMarks = {"!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".", "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`", "{", "|", "}", "~"};
-        for (String c : punctuationMarks) {
-            text = text.replace(c, " ");        //remove punctuation marks
-        }
+
+        text = text.replaceAll("\\p{Punct}", " ");       //remove punctuation marks
+
         String[] words = text.toLowerCase().split(" ");     //brings all tokens to lower case
         // remove words containing invalid char (Perchè non rimpiazzarlo? In un documento, non tutte le parole hanno char non validi)
         // remove extra spaces
@@ -36,19 +35,18 @@ public class Parser {
 
         for (String word : words) {
             // url are not considered and too long words (probably errors are not considered)
-            if (!word.isEmpty() && word.length() < 46 && (!word.startsWith("http") || !word.startsWith("www"))) {
+            if (!word.isEmpty() && word.length() < 46) {
                 Matcher matcher = pattern.matcher(word);
                 if(matcher.find()){
                     continue;
                 }
                 word = removeConsecutiveCharacter(word.trim());     // remove extra spaces and more than two consecutive not digit chars
-                if(word.length() >= 2)
-                    tokens.add(word);
+                tokens.add(word);
             }
         }
 
         if (parseFlag)
-                tokens = stemming(stopwords_filtering(tokens));     //first apply stopwords filtering, then stemming on the remaining ones
+            tokens = stemming(stopwords_filtering(tokens));     //first apply stopwords filtering, then stemming on the remaining ones
         return tokens;
     }
 

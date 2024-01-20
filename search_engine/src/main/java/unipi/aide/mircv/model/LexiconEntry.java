@@ -11,7 +11,7 @@ import java.nio.file.StandardOpenOption;
 
 import static unipi.aide.mircv.model.Lexicon.stringToArrayByteFixedDim;
 
-public class LexiconEntry implements Serializable {
+public class LexiconEntry {
     private int df;
     private double idf;
     private int docIdOffset;
