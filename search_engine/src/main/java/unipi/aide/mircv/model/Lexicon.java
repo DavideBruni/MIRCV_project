@@ -21,9 +21,6 @@ public class Lexicon{
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
     private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
-    private static final int LEXICON_CACHE_CAPACITY = 1000;
-
-    private LinkedHashMap<String,LexiconEntry> lexiconCache;
 
     // singleton pattern
     private static Lexicon instance;
@@ -36,12 +33,6 @@ public class Lexicon{
 
     private Lexicon(){
         entries = new TreeMap<>();
-        lexiconCache  = new LinkedHashMap<>(LEXICON_CACHE_CAPACITY, 0.8f, true){
-            protected boolean removeEldestEntry(Map.Entry<String, LexiconEntry> eldest)
-            {
-                return size() > LEXICON_CACHE_CAPACITY;
-            }
-        };
     }
 
 
@@ -153,15 +144,12 @@ public class Lexicon{
      * @see #getEntryFromDisk(String,boolean)
      */
     public static LexiconEntry getEntry(String token,boolean is_merged) {
-        LexiconEntry res = instance.lexiconCache.get(token);
+        LexiconEntry res = null;
+        if (instance.entries != null)
+            res = instance.entries.get(token);
         if (res == null) {
-            if (instance.entries != null)
-                res = instance.entries.get(token);
-            if (res == null) {
-                res = getEntryFromDisk(token, is_merged);
-                instance.add(token, res);
-
-            }
+            res = getEntryFromDisk(token, is_merged);
+            instance.add(token, res);
         }
         return res;
     }
@@ -309,11 +297,4 @@ public class Lexicon{
                 '}';
     }
 
-    public static LinkedHashMap<String, LexiconEntry> getLexiconCache() {
-        return instance.lexiconCache;
-    }
-
-    public static void setLexiconCache(LinkedHashMap<String, LexiconEntry> lexiconCache) {
-        instance.lexiconCache.putAll(lexiconCache);
-    }
 }

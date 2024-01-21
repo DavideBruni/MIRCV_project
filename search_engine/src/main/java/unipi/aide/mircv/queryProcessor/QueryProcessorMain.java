@@ -34,6 +34,7 @@ public class QueryProcessorMain {
             CustomLogger.error("Error in setting up environment");
             System.exit(-3);
         }
+        DocumentIndex.loadFromDisk();
         Configuration.setMinheapDimension(Integer.parseInt(args[4]));
         Configuration.setScoreStandard(args[2]);
 
@@ -89,7 +90,7 @@ public class QueryProcessorMain {
             filename += "parsed.txt";
         else
             filename += "not_parsed.txt";
-        try (BufferedReader br = new BufferedReader(new FileReader("msmarco-test2019-queries.tsv"));
+        try (BufferedReader br = new BufferedReader(new FileReader("msmarco-test2020-queries.tsv"));
              BufferedWriter resultStream = new BufferedWriter(new FileWriter(filename))) {
             String line;
             while ((line = br.readLine()) != null) {

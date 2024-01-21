@@ -5,7 +5,6 @@ import unipi.aide.mircv.exceptions.DocumentNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
 import unipi.aide.mircv.queryProcessor.Scorer;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -75,7 +74,7 @@ public class UncompressedPostingList extends PostingList{
         startNextFrequencyBlock = this.blockDescriptor.getNumberOfPostings();
     }
 
-    public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset) throws FileNotFoundException {
+    public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset){
         UncompressedPostingList res = null;
         try(FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getRootDirectory()+TEMP_DOC_ID_DIR + "/part"+partition+".dat"),
                 StandardOpenOption.READ);
@@ -292,5 +291,9 @@ public class UncompressedPostingList extends PostingList{
 
     public void setBlockDescriptor() {
         blockDescriptor = new BlockDescriptor(docIds.get(docIds.size()-1),docIds.size());
+    }
+
+    public int getMaxDocId() {
+        return docIds.get(docIds.size()-1);
     }
 }

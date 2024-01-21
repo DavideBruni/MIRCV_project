@@ -47,9 +47,8 @@ public class CompressedPostingList extends PostingList {
             int compressedSize = EliasFano.getCompressedSize(maxDocId, numberOfPostings);
             compressedIds = new byte[compressedSize];
             int l = EliasFano.getL(maxDocId,numberOfPostings);
-            long highBitsOffset = EliasFano.roundUp((long) l * numberOfPostings, Byte.SIZE);
-            long[] docIdsOffset = new long[]{0, highBitsOffset};
-            EliasFano.compress(((UncompressedPostingList) postingList).docIds, compressedIds,l,docIdsOffset);
+            long highBitsOffset = EliasFano.roundUp((long) l * numberOfPostings);
+            EliasFano.compress(((UncompressedPostingList) postingList).docIds, compressedIds,l,highBitsOffset);
 
             List<BitSet> compressedFrequenciesList = UnaryCompressor.compress(((UncompressedPostingList) postingList).frequencies);
             compressedFrequencies = new byte[0];
@@ -288,7 +287,7 @@ public class CompressedPostingList extends PostingList {
                         currentStartFrequencies = start_next_freq_block +  4;
                         if(blockDescriptor.getMaxDocId() >=docId){
                             currentIndexPostings = EliasFano.nextGEQ(Arrays.copyOfRange(compressedIds,currentStartIndexDocIds,blockDescriptor.getIndexNextBlockDocIds()),blockDescriptor.getNumberOfPostings(),blockDescriptor.getMaxDocId(),docId);
-                            lastFrequencyRead = -1;
+                            resetIndexes();
                             break;
                         }
                 }

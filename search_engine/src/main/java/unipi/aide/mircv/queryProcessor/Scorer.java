@@ -144,8 +144,8 @@ public class Scorer {
     }
 
     static class DocScorePair implements Comparable {
-        private int docid;
-        private double score;
+        private final int docid;
+        private final double score;
         private String pid;
 
         public DocScorePair(int docid, double score) {
@@ -164,9 +164,7 @@ public class Scorer {
             if (obj == null || obj.getClass() != this.getClass())
                 return false;
             DocScorePair docScorePair = (DocScorePair) obj;
-            if(docScorePair.docid == this.docid && docScorePair.score == this.score)
-                return true;
-            return false;
+            return docScorePair.docid == this.docid && docScorePair.score == this.score;
         }
 
         @Override
@@ -180,7 +178,7 @@ public class Scorer {
             if(pid == null){
                 pid = DocumentIndex.getDocno(docid);
             }
-            return  pid + "\t" +String.valueOf(score);
+            return  pid + "\t" + score;
         }
 
 

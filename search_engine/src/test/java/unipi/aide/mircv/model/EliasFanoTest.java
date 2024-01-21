@@ -17,6 +17,13 @@ class EliasFanoTest {
     }
 
     @Test
+    void testGetL(){
+        int l = EliasFano.getL(128,5);
+        int l2 = (int) Math.ceil(Math.log(128/(double)5)/Math.log(2));
+        assertEquals(l,l2);
+    }
+
+    @Test
     void getLSingleNumber() {
         // TODO commento sul test e su come abbiamo ottenuto 3
         int l = EliasFano.getL(5, 1);
@@ -39,8 +46,8 @@ class EliasFanoTest {
         integerList.add(9);
         integerList.add(12);
         byte [] compressed = new byte[2];
-        long highBitsOffset = EliasFano.roundUp(8, Byte.SIZE);
-        EliasFano.compress(integerList,compressed,2, new long[]{0,highBitsOffset});
+        long highBitsOffset = EliasFano.roundUp(8);
+        EliasFano.compress(integerList,compressed,2,highBitsOffset);
         byte [] result = new byte[]{68,90};
         assertArrayEquals(result,compressed);
     }

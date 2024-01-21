@@ -70,12 +70,13 @@ public class PostingLists {
             Set<String> keySet = postings.keySet();
             for(String token : keySet) {
                 PostingList postingList = postings.get(token);
+                LexiconEntry lexiconEntry = Lexicon.getEntry(token,false);
+                lexiconEntry.setMaxId(((UncompressedPostingList)postingList).getMaxDocId());
                 if (compressed){
                     postingList = new CompressedPostingList(postingList);
                 }else{
                     ((UncompressedPostingList)postingList).setBlockDescriptor();
                 }
-                LexiconEntry lexiconEntry = Lexicon.getEntry(token,false);
                 lexiconEntry.setDocIdOffset(offsets[0]);
                 lexiconEntry.setFrequencyOffset(offsets[1]);
                 offsets = postingList.writeOnDisk(docStream, freqStream, offsets);

@@ -52,7 +52,7 @@ public class InvertedIndex {
                         int docLen = tokens.size();
 
                         // adding documentLen (number of tokens) and mapping between docno and docId to documentIndex.
-                        DocumentIndex.add(++lastDocId, docLen);
+                        DocumentIndex.add(docLen);
 
                         //update collection statistics
                         CollectionStatistics.updateDocumentsLen(docLen);
@@ -63,7 +63,7 @@ public class InvertedIndex {
                             // if missing, a new entry will be added
                             lexicon.updateDf(token);        // if yes, we update the documentFrequency of the term
                             // create a new Posting and add it to the postingList of the term "token"
-                            postingLists.add(lastDocId, token, Collections.frequency(tokens,token));
+                            postingLists.add(++lastDocId, token, Collections.frequency(tokens,token));
                         }
                     }else{
                         allDocumentProcessed = true;
@@ -90,10 +90,10 @@ public class InvertedIndex {
                 }
                 Runtime.getRuntime().gc();
             }
-            DocumentIndex.closeStream();
+            DocumentIndex.writeOnDisk();
         } catch (UnableToWriteLexiconException e) {
             CustomLogger.error("Error while storing the Lexicon. Aborting index creation");
-        } catch (UnableToAddDocumentIndexException e) {
+        } catch (UnableToWriteDocumentIndexException e) {
             CustomLogger.error("Error while storing the DocumentIndex. Aborting index creation");
         }
 
@@ -181,7 +181,6 @@ public class InvertedIndex {
         }
 
         closeStreams(partialLexiconStreams);
-        DocumentIndex.closeStream();
         if(debug)
             CollectionStatistics.print();
     }

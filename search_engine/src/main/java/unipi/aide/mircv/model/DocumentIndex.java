@@ -2,9 +2,7 @@ package unipi.aide.mircv.model;
 
 import unipi.aide.mircv.configuration.Configuration;
 import unipi.aide.mircv.exceptions.DocumentNotFoundException;
-import unipi.aide.mircv.exceptions.UnableToAddDocumentIndexException;
-import unipi.aide.mircv.helpers.StreamHelper;
-import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.exceptions.UnableToWriteDocumentIndexException;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -12,94 +10,71 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.HashMap;
-import java.util.Map;
-
+import java.util.ArrayList;
 
 public class DocumentIndex {
 
     private static final String FILE_NAME = "documentIndex.dat";
-    private static FileChannel stream;
-    private static final int ENTRY_SIZE = 8;
-    private static int numEntries;
-    private static Map<Integer,Integer> index = new HashMap<>();
+    // the index could be a simple Array since:
+    //      - documentIds are incremental
+    //      - I choose to have the value of the docno = docid (DocId are integers in the collection)
+    //  but since I don't know the size a priori I need an ArrayList
+    private static final ArrayList<Integer> index = new ArrayList<>();
 
-    private static void initializeOutputStream() throws IOException {
-        stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath() + FILE_NAME), StandardOpenOption.APPEND, StandardOpenOption.CREATE);
+
+    /**
+     * Adds a document length to the index.
+     *
+     * @param docLen The length of the document to be added to the index.
+     **/
+    public static void add(int docLen) {
+        index.add(docLen);      // I save only the document length
     }
 
-
-    public static void add(int docno, int docLen) throws UnableToAddDocumentIndexException {
-        StreamHelper.createDir(Configuration.getDocumentIndexPath());
-        try {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(ENTRY_SIZE);
-            if(stream == null)
-                initializeOutputStream();
-            // Write docno as integer, then treated as a string, because in our collection pid are integers, save space by storing as Integers
-            buffer.putInt(docno);
-            buffer.putInt(docLen);
+    /**
+     * Writes the document lengths stored in the index to disk.
+     */
+    public static void writeOnDisk() throws UnableToWriteDocumentIndexException {
+        try(FileChannel stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath() + FILE_NAME), StandardOpenOption.APPEND, StandardOpenOption.CREATE)){
+            ByteBuffer buffer = ByteBuffer.allocateDirect(Integer.BYTES * index.size());
+            for(int i : index){
+                buffer.putInt(i);
+            }
             buffer.flip();
             stream.write(buffer);
         } catch (IOException e) {
-            CustomLogger.error("Unable to write to document index file.");
-            throw new UnableToAddDocumentIndexException("Unable to write to document index file.");
+            throw new UnableToWriteDocumentIndexException(e.getMessage());
         }
     }
 
-    public static void closeStream(){
-        try{
-            stream.close();
-        }catch (IOException e) {
-            CustomLogger.error("Error while closing DocumentIndexOutputStream");
-        }catch (NullPointerException ne){}
+    /**
+     * Reads document lengths from disk and populates the index.
+     */
+    public static void loadFromDisk(){
+        try(FileChannel stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath() + FILE_NAME), StandardOpenOption.READ)){
+            ByteBuffer buffer = ByteBuffer.allocateDirect(Integer.BYTES * CollectionStatistics.getCollectionSize());
+            stream.read(buffer);
+            buffer.flip();
+            for(int i : index){
+                index.add(buffer.getInt(i));
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
-
-    /***
+    /**
+     * Retrieves the document length for a given document ID.
      *
-     * @param docIdToFind   the docId of the document to which you want to know the length
-     * @return              the length of the document as number of tokens in it
+     * @param docIdToFind The document ID to find the length for.
+     * @return The length of the document with the specified ID.
+     * @throws DocumentNotFoundException If the document with the specified ID is not found.
      */
     public static int getDocumentLength(int docIdToFind) throws DocumentNotFoundException {
-        Integer documentLength = index.get(docIdToFind);
-        if(numEntries == 0)
-            numEntries = CollectionStatistics.getCollectionSize();
-        if (documentLength == null) {
-            long low = 0;
-            long high = numEntries;
-            long mid;
-
-            try (FileChannel file = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath()+FILE_NAME), StandardOpenOption.READ)) {
-                while (low <= high) {
-                    mid = (low + high) >>> 1;
-
-                    file.position(mid * ENTRY_SIZE);       // position at mid-file (or mid "partition" if it's not the first iteration)
-
-                    // read the record and parse it to string
-                    ByteBuffer buffer = ByteBuffer.allocateDirect(ENTRY_SIZE);
-                    file.read(buffer);
-                    buffer.flip();
-                    int docId = buffer.getInt();
-                    documentLength = buffer.getInt();
-                    if (!index.containsKey(docId))
-                        index.put(docId, documentLength);
-
-                    if (docId == docIdToFind) {       //find the entry
-                        return documentLength;
-                    } else if (docId < docIdToFind) {     // current entry is lower than target one
-                        low = mid + 1;
-                    } else {                // current entry is greater than target one
-                        high = mid - 1;
-                    }
-                }
-
-            } catch (IOException e) {
-                throw new DocumentNotFoundException("Document not found in the index.");
-            }
-            CustomLogger.error("Document not found in the index.");
-            throw new DocumentNotFoundException("Document not found in the index.");
-        } else {
-            return documentLength;
+        try {
+            return index.get(docIdToFind - 1);       //docId starts from 1, so i need to check for docId - 1
+        }catch (Exception e){
+            throw new DocumentNotFoundException(e.getMessage());
         }
     }
 
