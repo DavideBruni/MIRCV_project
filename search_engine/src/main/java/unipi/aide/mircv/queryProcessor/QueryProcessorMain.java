@@ -34,9 +34,12 @@ public class QueryProcessorMain {
             CustomLogger.error("Error in setting up environment");
             System.exit(-3);
         }
-        DocumentIndex.loadFromDisk();
+
         Configuration.setMinheapDimension(Integer.parseInt(args[4]));
         Configuration.setScoreStandard(args[2]);
+        if (Configuration.getScoreStandard().equals("BM25")){
+            DocumentIndex.loadFromDisk();
+        }
 
         if(trec){
             evaluation(parse);
@@ -61,7 +64,12 @@ public class QueryProcessorMain {
                 if (query.trim().charAt(0) == '+')
                     is_cunjuctive = true;
                 long timestamp_start = System.currentTimeMillis();
-                List<String> parsedQuery = Parser.getTokens(query, parse);
+                List<String> parsedQuery = null;
+                try {
+                    parsedQuery = Parser.getTokens(query, parse);
+                } catch (UnsupportedEncodingException e) {
+                    throw new RuntimeException(e);
+                }
                 //Collections.sort(parsedQuery);
                 PriorityQueue<Scorer.DocScorePair> queryResult = queryHandler(parsedQuery,is_cunjuctive);
 

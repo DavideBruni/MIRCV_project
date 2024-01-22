@@ -15,12 +15,12 @@ import java.util.stream.Collectors;
 
 public class PostingLists {
 
-    Map<String, PostingList> postings;                  // for each token, we have it's posting list
+    Map<String, PostingList> postings;            // for each token, we have it's posting list
     private static final String TEMP_DOC_ID_DIR = "/invertedIndex/temp/docIds";
     private static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     private static int NUM_FILE_WRITTEN = 0;       // since partial posting lists are stored in different partition, we need to know how many of them
 
-    public PostingLists() { this.postings = new HashMap<>(1500, 0.75F); }
+    public PostingLists() { this.postings = new HashMap<>(); }
 
     /**
      * Adds a posting to the inverted index of a given token.
@@ -43,14 +43,14 @@ public class PostingLists {
 
     public void sort() {
         postings = new LinkedHashMap<>(
-                postings.entrySet()
+                postings.entrySet()         //get all entry of the Map
                         .stream()
-                        .sorted(Map.Entry.comparingByKey())
-                        .collect(
-                                Collectors.toMap(
+                        .sorted(Map.Entry.comparingByKey())             //sort by comparing the value of the key
+                        .collect(                                       // collect the element of the stream in a new obj
+                                Collectors.toMap(                       // specify how to collect
                                         Map.Entry::getKey,
                                         Map.Entry::getValue,
-                                        (e1, e2) -> e1, LinkedHashMap::new)
+                                        (e1, e2) -> e1, LinkedHashMap::new)     // if we have key conflicts
                         )
         );
     }
@@ -80,7 +80,6 @@ public class PostingLists {
                 lexiconEntry.setDocIdOffset(offsets[0]);
                 lexiconEntry.setFrequencyOffset(offsets[1]);
                 offsets = postingList.writeOnDisk(docStream, freqStream, offsets);
-                // it's not necessary add the docIds and frequencies size since we have no block division here
             }
             NUM_FILE_WRITTEN++;
 

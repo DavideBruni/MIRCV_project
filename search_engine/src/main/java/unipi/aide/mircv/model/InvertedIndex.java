@@ -25,51 +25,63 @@ public class InvertedIndex {
      *
      * @param tarIn         TarInputStream from which read the collection
      * @param parse         indicate if perform stemming and stopwords filtering
+     * @param debug         indicate if print debug information
      */
     private static void SPIMI(TarArchiveInputStream tarIn, boolean parse, boolean debug) throws IOException {
         PostingLists postingLists = new PostingLists();
         Lexicon lexicon = Lexicon.getInstance();
-        BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));   // since the function is called inside another try catch, I cannot do this inside the try catch with resource, because I don't have to close the stream
+        // since the function is called inside another try catch,
+        // I cannot do this inside the try catch with resource, because I don't have to close the stream
+        BufferedReader reader = new BufferedReader(new InputStreamReader(tarIn));
         try{
             while (!allDocumentProcessed){
-                boolean freeMemory = true;
-                while (Runtime.getRuntime().freeMemory() > (Runtime.getRuntime().totalMemory() * 20 / 100)) {      // build index until 80% of total memory is used
+                boolean freeMemory = true;      // see the if(!freeMemory) explanation
+                // build index until 80% of total memory is used
+                while (Runtime.getRuntime().freeMemory() > (Runtime.getRuntime().totalMemory() * 20 / 100)) {
                     freeMemory = false;
                     String line;
                     if ((line = reader.readLine()) != null) {
+                        /* ---------------- DOCUMENT PARSING AND TOKENIZATION -------------- */
                         if (line.isBlank()){             // if the line read is empty, skip it
                             continue;
                         }
                         ParsedDocument parsedDocument;
                         try {
                             parsedDocument = Parser.parseDocument(line, parse);
+                            lastDocId++;
                         }catch (PidNotFoundException pe){
                             CustomLogger.error("PID not found for the current document, skip it");
                             continue;
+                        }catch (UnsupportedEncodingException ue){
+                            CustomLogger.error("The document is not UTF-8 encoded");
+                            continue;
                         }
-
                         List<String> tokens = parsedDocument.getTokens();
+                        /* ---------------- END DOCUMENT PARSING AND TOKENIZATION -------------- */
+
+                        /* ---------------- SET UP DOCUMENT INDEX AND COLLECTION STATISTICS -------------- */
                         int docLen = tokens.size();
-
-                        // adding documentLen (number of tokens) and mapping between docno and docId to documentIndex.
+                        // adding documentLen (number of tokens)
+                        // Note: docno = docId, since all the docNo in our collection are integers from 1 to 8Milions
                         DocumentIndex.add(docLen);
-
                         //update collection statistics
                         CollectionStatistics.updateDocumentsLen(docLen);
                         CollectionStatistics.updateCollectionSize();
-
+                        /* ---------------- END SET UP DOCUMENT INDEX AND COLLECTION STATISTICS -------------- */
+                        /* ---------------- POSTING LISTS CREATION FOR SINGLE DOCUMENT -------------- */
                         Set<String> uniqueTerms = new HashSet<>(tokens);
                         for(String token : uniqueTerms){
-                            // if missing, a new entry will be added
-                            lexicon.updateDf(token);        // if yes, we update the documentFrequency of the term
+                            lexicon.updateDf(token);
                             // create a new Posting and add it to the postingList of the term "token"
-                            postingLists.add(++lastDocId, token, Collections.frequency(tokens,token));
+                            postingLists.add(lastDocId, token, Collections.frequency(tokens,token));
                         }
+                        /* ---------------- END POSTING LISTS CREATION FOR SINGLE DOCUMENT -------------- */
                     }else{
                         allDocumentProcessed = true;
                         break;
                     }
                 }
+                /* ---------------- WRITING ON DISK -------------- */
                 if(!freeMemory) {
                     /* necessary because sometimes the while condition remain false for a certain amount of time, so I don't want
                         to write empty index on disk */
@@ -85,10 +97,11 @@ public class InvertedIndex {
                         CollectionStatistics.print();
                     }
                     Lexicon.writeOnDisk(false, debug);
-                    Lexicon.clear();
+                    Lexicon.clear();            //After writing a block, I need a brand-new Index (Lexicon and postingLists)
                     postingLists = new PostingLists();
                 }
-                Runtime.getRuntime().gc();
+                /* ---------------- END WRITING ON DISK -------------- */
+                Runtime.getRuntime().gc();      //call the garbage collector in order to free unused memory
             }
             DocumentIndex.writeOnDisk();
         } catch (UnableToWriteLexiconException e) {
@@ -100,7 +113,7 @@ public class InvertedIndex {
     }
 
     private static void Merge(boolean debug) {
-        //customLogger.info("Starting merging operation...");
+        /* ------------------- INITIALIZATION---------------------- */
         // 1. I have to keep open one stream for each lexicon partition
         FileChannel[] partialLexiconStreams = Lexicon.getStreams();
         String[] lowestTokens;
@@ -112,6 +125,7 @@ public class InvertedIndex {
             closeStreams(partialLexiconStreams);
             return;
         }
+        /* ------------------- END INITIALIZATION---------------------- */
         try(FileChannel docStream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIdsPath()),
                                                                                 StandardOpenOption.WRITE,
                                                                                 StandardOpenOption.READ,
@@ -121,22 +135,25 @@ public class InvertedIndex {
                                                                                 StandardOpenOption.READ,
                                                                                 StandardOpenOption.CREATE)){
             int[] offsets = new int[]{0,0};
+            LexiconEntry[] partialLexiconEntries = new LexiconEntry[partialLexiconStreams.length];
+            // each element of partialLexiconEntries will be equal to the lexiconEntry of the lowest term for that partition
             while(true) {
                 String token = findLowerToken(lowestTokens);
-                // if there's not a lower token, I merged them all
-                if (token == null)
+                if (token == null)  // if there's not a lower token, I merged them all
                     break;
+                /* --------- The lexiconEntry and all other information related to the postingList merged -------- */
                 LexiconEntry lexiconEntry = new LexiconEntry();
-                LexiconEntry[] partialLexiconEntries = new LexiconEntry[partialLexiconStreams.length];
                 int df = 0;
                 double idf;
                 double BM25_ub = 0.0;
                 double TFIDF_ub = 0.0;
                 int maxDocId = 0;
+                /* ---------------------------------------------- End ---------------------------------------------*/
                 int [] start_positions = offsets.clone();
                 for (int i = 0; i < lowestTokens.length; i++) {
+                    // I consider only partitions that have the lowest token (they could be more than 1)
+                    // I need to check if != null because at the end a lot of elements will be null
                     if (lowestTokens[i] != null && lowestTokens[i].equals(token)) {
-                        // I consider only partitions that have the lowest token (they could be more than 1)
                         LexiconEntry tmp = Lexicon.readEntryFromPartition(partialLexiconStreams[i]);
                         if (tmp != null) {
                             df += tmp.getDf();
@@ -145,16 +162,24 @@ public class InvertedIndex {
                         }
                     }
                 }
+                /* ------------ UPDATE LEXICON ENTRY ----------- */
                 idf = Math.log10(CollectionStatistics.getCollectionSize() / (double) df);
                 lexiconEntry.setDf(df);
-                lexiconEntry.setIdf(idf);
                 lexiconEntry.setDocIdOffset(start_positions[0]);
                 lexiconEntry.setFrequencyOffset(start_positions[1]);
+                /* --------------------------------------- */
                 double[] scores;
                 UncompressedPostingList notWrittenYetPostings = new UncompressedPostingList();
+                /* The strategy is the following:
+                    - get the postingList from the first partitions having the lowest token (partition are ordered, so previous
+                        partitions have smaller documentIds that must be written first
+                    - accumulate until I reached the dimension of a block at least, than write the first block(s)
+                    - if some posting still remaining, write the last block with a different number of elements
+                 */
                 for (int i = 0; i < partialLexiconEntries.length; i++) {
-                    if (lowestTokens[i] != null && lowestTokens[i].equals(token)) {
+                    if (lowestTokens[i] != null && lowestTokens[i].equals(token)) {     // again, only lexiconEntry with token == lowestToken
                         LexiconEntry tmp = partialLexiconEntries[i];
+                        // read the posting list and decompress if necessary
                         UncompressedPostingList partialPostingList = PostingList.readFromDisk(i, tmp.getDocIdOffset(),
                                 tmp.getFrequencyOffset(), Configuration.isCOMPRESSED());
                         offsets = partialPostingList.writeToDiskMerged(docStream, freqStream, offsets, df, notWrittenYetPostings, maxDocId);
@@ -168,8 +193,11 @@ public class InvertedIndex {
                 scores = Scorer.calculateTermUpperBounds(notWrittenYetPostings, idf);
                 BM25_ub = Math.max(BM25_ub, scores[0]);
                 TFIDF_ub = Math.max(TFIDF_ub, scores[1]);
+                // update lexiconEntry stats: length are necessary in order to load all the posting list in memory when performing
+                // query processing
                 lexiconEntry.setDocIdLength(offsets[0] - start_positions[0]);
                 lexiconEntry.setFrequencyLength(offsets[1] - start_positions[1]);
+                // term upper bounds are necessary for dynamic pruning
                 lexiconEntry.setTermUpperBounds(BM25_ub, TFIDF_ub);
                 lexiconEntry.writeOnDisk(token);
                 CollectionStatistics.updateNumberOfToken(1);

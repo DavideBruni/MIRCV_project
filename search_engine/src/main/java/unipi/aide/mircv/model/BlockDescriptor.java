@@ -7,8 +7,9 @@ import java.nio.channels.FileChannel;
 public class BlockDescriptor {
     private final int maxDocId;
     private final int numberOfPostings;
-    private final int nextFrequenciesOffset;
-    private final int indexNextBlockDocIds;
+    // only the previous value are written in the documentIds file on disk
+    private final int nextFrequenciesOffset;    // Faster way to get the exact size of frequencies block
+    private final int indexNextBlockDocIds;     // Faster way to get the exact size of docIds block
 
     public BlockDescriptor(BlockDescriptor blockDescriptor) {
         maxDocId = blockDescriptor.maxDocId;
@@ -41,14 +42,16 @@ public class BlockDescriptor {
     public BlockDescriptor(BlockDescriptor blockDescriptor, byte[] docIdsDescriptor, byte[] frequenciesDescriptor) {
         ByteBuffer docBuffer = ByteBuffer.wrap(docIdsDescriptor);
         maxDocId = docBuffer.getInt();
-        if(maxDocId==0){
+        if(maxDocId==0){        //Something is wrong, when I copied the array, I used index greater than the actual length
             numberOfPostings = nextFrequenciesOffset = indexNextBlockDocIds =0;
             return;
         }
         numberOfPostings = docBuffer.getInt();
+        // start of next blockId is: currentStart + sizeOfTheBlock + sizeOfCurrentBlockDescriptor (i.e. 8)
         indexNextBlockDocIds = blockDescriptor.indexNextBlockDocIds + EliasFano.getCompressedSize(maxDocId,numberOfPostings) + 8;
 
         ByteBuffer freqBuffer = ByteBuffer.wrap(frequenciesDescriptor);
+        // start of next frequencies is: currentStart + sizeOfTheBlock (i.e. getInt) + sizeOfCurrentBlockDescriptor (i.e. 8)
         nextFrequenciesOffset = blockDescriptor.nextFrequenciesOffset + freqBuffer.getInt() + 4;
     }
 

@@ -158,13 +158,13 @@ public class UncompressedPostingList extends PostingList{
     public double score() {
         if(Configuration.getScoreStandard().equals("BM25")){
             try {
-                return Scorer.BM25_singleTermDocumentScore(frequencies.get(frequenciesIndex),docIds.get(currentIndexPostings),lexiconEntry.getIdf());
+                return Scorer.BM25_singleTermDocumentScore(frequencies.get(frequenciesIndex),docIds.get(currentIndexPostings),lexiconEntry.getDf());
             } catch (DocumentNotFoundException e) {
                 System.out.println(e.getMessage());
                 return 0;
             }
         }else{
-            return Scorer.TFIDF_singleTermDocumentScore(frequencies.get(frequenciesIndex), lexiconEntry.getIdf());
+            return Scorer.TFIDF_singleTermDocumentScore(frequencies.get(frequenciesIndex), lexiconEntry.getDf());
         }
     }
 
@@ -238,6 +238,7 @@ public class UncompressedPostingList extends PostingList{
     }
 
     public int[] writeToDiskMerged(FileChannel docStream, FileChannel freqStream, int[] offsets, int df, UncompressedPostingList notWrittenYetPostings,int maxDocId) throws IOException {
+        // notWrittenYet elements come from a previous partition, so ids are smaller than the other ones --> they must be processed first
         if(notWrittenYetPostings != null && !notWrittenYetPostings.docIds.isEmpty()){
             docIds.addAll(0,notWrittenYetPostings.docIds);
             frequencies.addAll(0,notWrittenYetPostings.frequencies);

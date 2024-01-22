@@ -1,95 +1,91 @@
 package unipi.aide.mircv.model;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.BitSet;
 import java.util.List;
-import org.apache.commons.lang3.ArrayUtils;
 
 public class UnaryCompressor {
 
-
-    public static List<BitSet> compress(List<Integer> frequencies) {
-        List<BitSet> res = new ArrayList<>();
-        for(int i = 0; i< frequencies.size(); i++){
-            try {
-                BitSet tmp = new BitSet(i+1);
-                tmp.set(1, frequencies.get(i)+1);
-                res.add(tmp);
-            }catch(IndexOutOfBoundsException ex){
-                // if the clusters[i] is 0 (i.e. there are no numbers of that cluster), this exception will be thrown
-            }
-        }
-        return res;
+    /**
+     * Calculates the size, in bytes, needed to represent a list of frequencies in unary encoding.
+     * Unary encoding represents each element of the list by a sequence of '1's followed by a '0'
+     *
+     * @param frequencies A list of integers representing the frequencies of elements.
+     * @return The size, in bytes, required for the unary encoding of the given list of frequencies.
+     *         If the calculated size is 0, it is adjusted to 1 to represent at least one byte.
+     */
+    private static int getByteSizeInUnary(List<Integer> frequencies) {
+        // Calculate the sum of list elements
+        int sum = frequencies.stream().mapToInt(Integer::intValue).sum();
+        // Consider n 0s (one for each element)
+        sum += frequencies.size();
+        int size = (int) Math.ceil((double)sum/Byte.SIZE); // Calculate the size in bytes, rounding up to the nearest integer
+        // Ensure the size is at least 1 byte
+        return size == 0 ? 1 : size;
     }
 
-
-    public static int writeToDisk(List<BitSet> unaryCompressedFrequencyList, FileChannel stream, int offset,boolean merged) throws IOException {
-        byte [] totalBuffer = new byte[0];
-        for(BitSet bitSet : unaryCompressedFrequencyList){
-            byte[] bits = bitSet.toByteArray();
-            totalBuffer = ArrayUtils.addAll(totalBuffer, bits);
-            offset+=bits.length;
+    /**
+     * Compresses a list of frequencies using unary encoding.
+     *
+     * @param frequencies A list of integers representing the frequencies of elements.
+     * @return A byte array containing the compressed unary encoding of the given list of frequencies.
+     *         The size of the byte array is determined by the {@link #getByteSizeInUnary(List)} method.
+     * @see #getByteSizeInUnary(List)
+     */
+    public static byte[] compress(List<Integer> frequencies) {
+        byte[] compressedFrequencies = new byte [getByteSizeInUnary(frequencies)];
+        long bitsOffset = 0;
+        for (Integer frequency : frequencies) {
+            bitsOffset = Bits.writeUnary(compressedFrequencies, bitsOffset, frequency) + 1;
         }
-        if(merged) {
-            ByteBuffer positionBuffer = ByteBuffer.allocateDirect(Integer.BYTES);
-            offset += Integer.BYTES;
-            positionBuffer.putInt(offset);  // position next block
-            positionBuffer.flip();
-            stream.write(positionBuffer);
-
-        }
-        ByteBuffer buffer = ByteBuffer.allocateDirect(totalBuffer.length);
-        buffer.put(totalBuffer);
-        buffer.flip();
-        stream.write(buffer);
-        return offset;
+        return compressedFrequencies;
     }
 
-    private static int readNumber(FileChannel stream) throws IOException {
-        int number = 0;
-        while(true){
-            ByteBuffer buffer = ByteBuffer.allocateDirect(1);
-            stream.read(buffer);
-            buffer.flip();
-            byte frequencyBuffer = buffer.get();
-            int bitsSet = Integer.bitCount(frequencyBuffer & 0xFF);
-            if (bitsSet == 0)
-                return number;
-            number +=bitsSet;
-            if(frequencyBuffer % 2 == 0)        // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
-                return number;
-        }
-    }
-
-    public static List<Integer> readFrequencies(FileChannel freqStream, int numberOfPostings) throws IOException {
+    /**
+     * Decompresses frequencies from a byte array using unary encoding.
+     * This method takes a byte array containing compressed frequencies in unary encoding
+     * and decompresses them into a list of integers.
+     *
+     * @param compressedFrequencies A byte array containing the compressed unary encoding of frequencies.
+     * @return A list of integers representing the decompressed frequencies.
+     * @see Bits#readUnary(byte[], long)
+     */
+    public static List<Integer> decompressFrequencies(byte [] compressedFrequencies) {
         List<Integer> frequencies = new ArrayList<>();
-        for(int i = 0; i<numberOfPostings; i++){
-            frequencies.add(readNumber(freqStream));
+        long bitsOffset = 0;
+        for(int i = 0; i<compressedFrequencies.length; i++){
+            int number = Bits.readUnary(compressedFrequencies,bitsOffset);
+            frequencies.add(number);
+            bitsOffset += number + 1;
         }
         return frequencies;
     }
 
-    public static int[] get(byte[] compressedIds, int index, int lastReadFrequency, int currentFrequencyIndex) {
+    /**
+     * This method reads the unary-encoded frequencies from the given compressed byte array,
+     * starting from the specified index and continuing until the target index is reached.
+     * It returns an array containing the last read frequency and the updated index.
+     *
+     * @param compressedIds         A byte array containing compressed unary-encoded frequencies.
+     * @param index                 The target index representing the frequency to retrieve.
+     * @param lastReadFrequency     The last frequency that was read (starting point for reading).
+     * @param currentFrequencyIndex The current index in the compressed byte array for frequency decoding.
+     * @return An array containing two elements:
+     *         - The last read frequency.
+     *         - The updated index (position) in the compressed byte array for further decoding.
+     * @see Bits#readUnary(byte[], long)
+     */
+    public static long[] get(byte[] compressedIds, int index, int lastReadFrequency, long currentFrequencyIndex) {
         int number = 0;
+        // I need double loop since can I had skipped some docIds so the last frequency I read is different from the previous
+        // element in the array
         for(; lastReadFrequency<index; lastReadFrequency++) {       // from lastDecompressNumber, to the actual one
             number = 0;
             for (; currentFrequencyIndex<compressedIds.length; currentFrequencyIndex++) {
-                int bitsSet = Integer.bitCount(compressedIds[currentFrequencyIndex] & 0xFF);
-                if (bitsSet == 0) {
-                    currentFrequencyIndex++;
-                    break;
-                }
-                number += bitsSet;
-                if (compressedIds[currentFrequencyIndex] % 2 == 0) {      // es: 10 --> 00000111 11111110  --> odd byte are followed by something else
-                    currentFrequencyIndex++;
-                    break;
-                }
+                number = Bits.readUnary(compressedIds,currentFrequencyIndex);
+                currentFrequencyIndex += number + 1;
             }
         }
-        return new int[] {number,currentFrequencyIndex};
+        return new long[] {number,currentFrequencyIndex};
     }
 
 

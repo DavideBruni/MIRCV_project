@@ -1,95 +1,63 @@
-/*
- * Copyright 2016-2018 Matteo Catena
- * 
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package unipi.aide.mircv.model;
 
 /**
- * A support class for unaligned binary writing/reading and unary
- * writing/reading
- * 
- * @author Matteo Catena
- *
+ * Utility class for bitwise operations and compression techniques.
+ * This class provides methods for writing and reading binary and unary-encoded values
+ * in a byte array. It also includes a static array for pre-computed masks used during
+ * binary encoding. The class is designed to support compression techniques.
  */
 public final class Bits {
 
 	private Bits() {
-
+		// Private constructor to prevent instantiation of the utility class.
 	}
 
 	static final int[] VAL_TO_WRITE;
-	private static final int[] ZEROS;
-	private static final int[] ONE;
 
 	static {
-
+		/*I prefer to use an array of 33 values in order to avoid the calculation of the mask each time I have to compress
+			I need 33 values since I have to consider all possibilities, from 0 to 32 bits to be written*/
 		VAL_TO_WRITE = new int[Integer.SIZE + 1];
 		for (int i = 0; i <= Integer.SIZE; i++)
 			VAL_TO_WRITE[i] = 0xFFFFFFFF >>> (Integer.SIZE - i);
-
-		ZEROS = new int[] { 0b11111111, 0b01111111, 0b00111111, 0b00011111, 0b00001111, 0b00000111, 0b00000011,
-				0b00000001, 0b00000000 };
-
-		ONE = new int[] { 0b10000000, 0b01000000, 0b00100000, 0b00010000, 0b00001000, 0b00000100, 0b00000010,
-				0b00000001 };
 	}
 
 	static void writeBinary(final byte[] in, long bitOffset, int val, int numbits) {
-
-		while (numbits > 0) {
-
-			final int longOffset = (int) (bitOffset / Byte.SIZE);
-			final int bitPosition = (int) (bitOffset % Byte.SIZE);
+		while (numbits > 0) {		//while I have bit to write
+			final int byteOffset = (int) (bitOffset / Byte.SIZE);	//in which byte I have to write
+			final int bitPosition = (int) (bitOffset % Byte.SIZE);	//at what position of the byte (which bit)
 			final int availableSpace = Byte.SIZE - bitPosition;
-			final int bitsToWrite = Math.min(numbits, availableSpace);
+			final int bitsToWrite = Math.min(numbits, availableSpace);	//The number of bit I can write starting from that position
 			final int shift = numbits - availableSpace;
 
-			if (availableSpace < numbits) {
-
-				in[longOffset] |= val >>> shift;
-				val &= VAL_TO_WRITE[shift];
-
+			if (availableSpace < numbits) {				//i.e. shift > 0
+				in[byteOffset] |= val >>> shift;		//I write only the first k - shift bit
+				val &= VAL_TO_WRITE[shift];				//I reset the k-shift bit I wrote
 			} else {
-
-				in[longOffset] |= val << -shift;
-				val &= VAL_TO_WRITE[-shift];
+				in[byteOffset] |= val << -shift;		//shift is negative, so I need a positive number, need also to write in the correct position so I use <<
+				val &= VAL_TO_WRITE[-shift];			//I reset the k-shift bit I wrote
 			}
-
-			bitOffset += bitsToWrite;
+			bitOffset += bitsToWrite;					// update position and counter
 			numbits -= bitsToWrite;
 		}
 	}
 
 	static int readBinary(final byte[] in, long bitOffset, int numbits) {
-
 		int val = 0;
-
 		while (numbits > 0) {
-
-			final int longOffset = (int) (bitOffset / Byte.SIZE);
+			final int byteOffset = (int) (bitOffset / Byte.SIZE);
 			final int bitPosition = (int) (bitOffset % Byte.SIZE);
 			final int availableSpace = Byte.SIZE - bitPosition;
 			final int bitsToRead = Math.min(numbits, availableSpace);
-
+			// if I need more than one iteration, I have to perform left shift in order to not overwrite the bits already read
 			val <<= bitsToRead;
-			int read = ZEROS[bitPosition] & in[longOffset];
-			final int shift = availableSpace - numbits;
-			if (shift > 0) {
+			int mask = 0xFF >>> bitPosition;				// avoid the first bits if necessary
+			int read = mask & in[byteOffset];
+			final int shift = availableSpace - numbits;		// if > 0 means that I read more than necessary
+			if (shift > 0) {								// for this reason I need right shift
 				read >>>= shift;
 			}
-			val |= read;
-
+			val |= read;									//writing the bits read
 			bitOffset += bitsToRead;
 			numbits -= bitsToRead;
 		}
@@ -97,46 +65,44 @@ public final class Bits {
 		return val;
 	}
 
-	static void writeUnary(final byte[] in, long bitOffset, int val) {
-
+	static long writeUnary(final byte[] in, long bitOffset, int val) {
 		while (val > 0) {
-
-			final int longOffset = (int) (bitOffset / Byte.SIZE);
+			final int byteOffset = (int) (bitOffset / Byte.SIZE);
 			final int bitPosition = (int) (bitOffset % Byte.SIZE);
 			final int availableSpace = Byte.SIZE - bitPosition;
+			final int bitToWrite = (int) Math.min(val, availableSpace);
+			final int positionLast1 = Byte.SIZE - bitToWrite; //I want the 1s in leading position: how many 0s I have at the end
+			final int ones = 0b11111111 & (0b11111111 << positionLast1);	//shift in order to have bitToWrite 1s in leading position
 
-			final int numZeros = (int) Math.min(val, availableSpace);
-			final int zeros = ZEROS[numZeros];
-
-			//in[longOffset] &= (zeros >>> bitPosition) | (zeros << (Byte.SIZE - bitPosition));
-			bitOffset += numZeros;
-			val -= numZeros;
+			// shift the number to the correct starting position and set the bits
+			in[byteOffset] |= (byte) (ones >>> bitPosition) ;
+			bitOffset += bitToWrite;		//updating position and remaining bits to write
+			val -= bitToWrite;
 		}
-
-		final int longOffset = (int) (bitOffset / Byte.SIZE);
-		final int bitPosition = (int) (bitOffset % Byte.SIZE);
-		in[longOffset] |= ONE[bitPosition];
+		return bitOffset;
 	}
 
 	static int readUnary(final byte[] in, long bitOffset) {
-
 		int val = 0;
-
-		int longOffset = (int) (bitOffset / Byte.SIZE);
+		int byteOffset = (int) (bitOffset / Byte.SIZE);
 		final int bitPosition = (int) (bitOffset % Byte.SIZE);
-		int x = in[longOffset] & ZEROS[bitPosition];
+		byte x = (byte) (in[byteOffset] & (byte) (0b11111111 >>> bitPosition));    //I have to discard the first bitPositionByte
+		x = (byte) ~x;						// use the negation
+		x = (byte) (x << bitPosition);		//align the start of the unary compression with the start of the byte
 
-		if (x != 0) {
-
-			val -= bitPosition;
-
-		} else {
-
-			val += Byte.SIZE - bitPosition;
-			for (;in[longOffset+1] == 0; longOffset++) val+= Byte.SIZE;
-			x = in[longOffset + 1] & 0xFF;
-		}
-		
-		return val + (Byte.SIZE - (Integer.SIZE - Integer.numberOfLeadingZeros(x)));
+		if (x == 0){						// if equal to 0, the compressed number stay on More than one Byte
+			val += Byte.SIZE - bitPosition;			//count the number of 1, i.e. ByteSize - bitPosition
+			for (;(~in[byteOffset+1]) == 0; byteOffset++) 	//if ~x == 0 --> x is equal to a byte with all 1
+				val+= Byte.SIZE;							// I need to add 8
+			x = (byte) ~in[byteOffset + 1];					// the remaining part is equal to the number of leading 0
+		}									//else, the uncompressed number is equal to the number of leading 0 of ~X
+		int partialRes = (Byte.SIZE - (Integer.SIZE - Integer.numberOfLeadingZeros(x)));
+		partialRes = Math.max(partialRes,0);
+		return val + partialRes;
+		/* since number of leading 0 is a function of Integer Class, I have to use this trick to count the number of leading 0s
+			in a single byte: (Byte.SIZE - (Integer.SIZE - Integer.numberOfLeadingZeros(x)), i.e.:
+			count the number of bits after the leading 0s, then subtract this number from 8 (bits), then sum with val (if number was compress on a single
+			byte, val was equal to 0)
+		*/
 	}
 }

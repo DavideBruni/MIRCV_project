@@ -9,20 +9,19 @@ import unipi.aide.mircv.log.CustomLogger;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.*;
-import java.util.function.Function;
 
 public class Lexicon{
 
     private static final String TEMP_DIR ="/invertedIndex/temp/lexicon";
     private static int NUM_FILE_WRITTEN = 0;        // needed to know how many lexicon retrieve in merge operation
     private Map<String,LexiconEntry> entries;       // for each token, we need to save several information
+    public static final int TERM_DIMENSION = 64;    // number of byte
 
-    // singleton pattern
+    /* ---------------------- SINGLETON PATTERN  -------------------- */
     private static Lexicon instance;
     public static Lexicon getInstance(){
         if(instance == null){
@@ -35,41 +34,44 @@ public class Lexicon{
         entries = new TreeMap<>();
     }
 
+    /* ---------------------- END SINGLETON PATTERN  -------------------- */
 
-
-
+    /* ---------------------- FUNCTIONS USED ONLY IN MERGE PART  -------------------- */
     /**
-     * Retrieves the first set of tokens from the specified array of partial lexicon streams.
+     * Retrieves the first tokens from an array of partial lexicon streams.
+     * This method reads the first tokens from the specified array of partial lexicon streams
+     * and returns them as an array of strings.
      *
-     * @param partialLexiconStreams An array of {@code DataInputStream} objects representing partial lexicon streams.
-     * @return An array of strings containing the first set of tokens from the partial lexicon streams.
-     * @throws PartialLexiconNotFoundException If an IOException occurs while reading from the input streams.
+     * @param partialLexiconStreams An array of file channels representing partial lexicon streams.
+     * @return                      An array of strings containing the first tokens from each partial lexicon stream.
+     * @throws PartialLexiconNotFoundException If an error occurs while reading the partial lexicon streams.
      */
     public static String[] getFirstTokens(FileChannel[] partialLexiconStreams) throws PartialLexiconNotFoundException {
         return getTokens(new String[NUM_FILE_WRITTEN],partialLexiconStreams);
     }
 
-
     /**
-     * Populates the provided array of tokens by reading from the corresponding partial lexicon streams.
-     * If a token is already present in the array, it is skipped. If the token is null, and the
-     * corresponding partial lexicon stream is not null, the method attempts to read a token from the stream.
+     * Retrieves the lowest token for each of partial lexicon streams.
+     * This method reads tokens from the specified array of partial lexicon streams and updates
+     * the provided array of tokens. If a token is already present in the array, it is skipped,
+     * and the next token is read from the corresponding partial lexicon stream.
      *
-     * @param tokens                 An array of strings to store the lexicon tokens.
-     * @param partialLexiconStreams An array of {@code DataInputStream} objects representing partial lexicon streams.
-     * @return The array of strings containing lexicon tokens, with updated values from the partial lexicon streams.
-     * @throws PartialLexiconNotFoundException If an IOException occurs while reading from any of the input streams.
+     * @param tokens                An array of strings to store the tokens.
+     * @param partialLexiconStreams An array of file channels representing partial lexicon streams.
+     * @return                      The updated array of strings containing tokens from partial lexicon streams.
+     * @throws PartialLexiconNotFoundException If an error occurs while reading the partial lexicon streams.
      */
     public static String[] getTokens(String[] tokens, FileChannel[] partialLexiconStreams) throws PartialLexiconNotFoundException {
+        // I know the position is right, because I read first the token, then the rest of the entry, I cannot skip the read of the entry
         for(int i =0; i< tokens.length; i++){
             if (tokens[i] == null){
                 try {
-                    ByteBuffer tmp = ByteBuffer.allocateDirect(45);
+                    ByteBuffer tmp = ByteBuffer.allocateDirect(TERM_DIMENSION);
                     int len = partialLexiconStreams[i].read(tmp);
                     if (len < 0)
                         throw new EOFException();
                     tmp.flip();
-                    byte[] byteBuffer = new byte[45];
+                    byte[] byteBuffer = new byte[TERM_DIMENSION];
                     tmp.get(byteBuffer);
                     tokens[i] = new String(byteBuffer, 0, len);
                     tokens[i] = tokens[i].trim();
@@ -84,11 +86,6 @@ public class Lexicon{
         return tokens;
     }
 
-    /**
-     * Retrieves an array of {@code DataInputStream} objects representing streams for lexicon partitions.
-     *
-     * @return An array of {@code DataInputStream} objects representing lexicon partition streams.
-     */
     public static FileChannel[] getStreams() {
         FileChannel[] dataInputStreams = new FileChannel[NUM_FILE_WRITTEN];
         for(int i=0; i<NUM_FILE_WRITTEN; i++){
@@ -105,7 +102,7 @@ public class Lexicon{
 
 
     public static LexiconEntry readEntryFromPartition(FileChannel partialLexiconStream) {
-        // we already read the token stored, we have to read the remaning part of the LexiconEntry
+        // I already read the token stored, so I have to read the remaining part of the LexiconEntry
         LexiconEntry lexiconEntry = new LexiconEntry();
         try {
             ByteBuffer buffer = ByteBuffer.allocateDirect(LexiconEntry.getEntryDimension(false));
@@ -124,24 +121,18 @@ public class Lexicon{
         return lexiconEntry;
     }
 
-
-    public static <T> T getEntryValue(String term, Function<LexiconEntry, T> valueExtractor) {
-        LexiconEntry lexiconEntry = getEntry(term,true);
-        if (lexiconEntry!= null)
-            return valueExtractor.apply(lexiconEntry);
-        return null;
-    }
-
-
+    /* ---------------------- END FUNCTIONS USED ONLY IN MERGE PART  -------------------- */
 
     /**
-     * Retrieves the LexiconEntry for the specified token.
-     * This method first attempts to retrieve the entry from memory. If it is not found, it is then
-     * retrieved from the lexicon stored on disk using the {@link #getEntryFromDisk(String,boolean)} method.
+     * Retrieves a LexiconEntry for the given token.
+     * This method first attempts to retrieve a LexiconEntry from the in-memory entries map.
+     * If the entry is not found in memory, it is then retrieved from disk and added to the
+     * in-memory cache for future access.
      *
-     * @param token The token for which to retrieve the LexiconEntry.
-     * @return The LexiconEntry for the specified token, or null if the entry is not found.
-     * @see #getEntryFromDisk(String,boolean)
+     * @param token             The token for which to retrieve the LexiconEntry.
+     * @param is_merged         A boolean indicating whether the lexicon is merged.
+     * @return The LexiconEntry associated with the given token.
+     *         If the entry is not found, null is returned.
      */
     public static LexiconEntry getEntry(String token,boolean is_merged) {
         LexiconEntry res = null;
@@ -161,33 +152,34 @@ public class Lexicon{
      * @return The LexiconEntry for the specified token, or null if the entry is not found.
      */
     private static LexiconEntry getEntryFromDisk(String targetToken, boolean is_merged) {
-        int entrySize = (45 + LexiconEntry.getEntryDimension(is_merged));
+        int entrySize = (TERM_DIMENSION + LexiconEntry.getEntryDimension(is_merged));
         long low = 0;
         long high = CollectionStatistics.getNumberOfTokens();
         long mid;
 
         try(FileChannel stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getLexiconPath()), StandardOpenOption.READ)){
+            /* ---------------------- BINARY SEARCH  -------------------- */
             while (low <= high) {
                 mid = (low + high) >>> 1;
 
                 stream.position(mid*entrySize); // position at mid-file (or mid "partition" if it's not the first iteration)
 
                 // read the record and parse it to string
-                ByteBuffer recordBytes = ByteBuffer.allocateDirect(45);
+                ByteBuffer recordBytes = ByteBuffer.allocateDirect(TERM_DIMENSION);
                 int len = stream.read(recordBytes);
                 recordBytes.flip();
-                byte [] string_buffer = new byte[45];
+                byte [] string_buffer = new byte[TERM_DIMENSION];
                 recordBytes.get(string_buffer);
                 String currentToken = new String(string_buffer, 0, len).trim();
 
                 int compareResult = currentToken.compareTo(targetToken);
 
                 if (compareResult == 0) {       //find the entry
-                    ByteBuffer buffer = ByteBuffer.allocateDirect(entrySize-45);
+                    ByteBuffer buffer = ByteBuffer.allocateDirect(entrySize-TERM_DIMENSION);
                     stream.read(buffer);
                     buffer.flip();
-                    return new LexiconEntry(buffer.getInt(), buffer.getDouble(), buffer.getInt(),
-                            buffer.getInt(), buffer.getInt(), buffer.getInt(), buffer.getDouble(), buffer.getDouble());
+                    return new LexiconEntry(buffer.getInt(), buffer.getInt(), buffer.getInt(),
+                            buffer.getInt(), buffer.getInt(), buffer.getDouble(), buffer.getDouble());
                 } else if (compareResult < 0) {     // current entry is lower than target one
                     low = mid + 1;
                 } else {                // current entry is greater than target one
@@ -213,15 +205,6 @@ public class Lexicon{
         }
     }
 
-    public static void setEntry(String token, LexiconEntry lexiconEntry){
-        instance.entries.put(token, lexiconEntry);
-    }
-
-
-    public int numberOfEntries() {
-        return instance.entries.entrySet().size();
-    }
-
 
     /**
      * Writes the lexicon entries to disk, either as a merged lexicon or as individual partition files.
@@ -230,6 +213,7 @@ public class Lexicon{
      */
 
     public static void writeOnDisk(boolean is_merged, boolean debug) throws UnableToWriteLexiconException {
+        /* ------------- SETTING FILE NAME -------------*/
         String filename;
         if(is_merged) {
             filename = Configuration.getLexiconPath();
@@ -237,6 +221,7 @@ public class Lexicon{
             StreamHelper.createDir(Configuration.getRootDirectory()+TEMP_DIR);
             filename = Configuration.getRootDirectory()+TEMP_DIR + "/part" + NUM_FILE_WRITTEN+ ".dat";
         }
+        /* ---------------------------------------------*/
         File file = new File(filename);
         try(FileChannel stream = (FileChannel) Files.newByteChannel(file.toPath(),
                 StandardOpenOption.APPEND,
@@ -250,6 +235,7 @@ public class Lexicon{
         } catch (IOException e) {
             throw new UnableToWriteLexiconException(e.getMessage());
         }
+        /* ---------------- DEBUG  ----------------*/
         if(debug){
             PrintStream originalOut = System.out;
             try {
@@ -263,22 +249,9 @@ public class Lexicon{
                 System.setOut(originalOut);
             }
         }
+        /* -------------------------------------*/
     }
 
-    static byte[] stringToArrayByteFixedDim(String key, int length) {
-        byte[] byteArray = new byte[length];
-        byte[] inputBytes = key.getBytes(StandardCharsets.UTF_8);
-
-        // String's bytes copy into the byte array
-        System.arraycopy(inputBytes, 0, byteArray, 0, Math.min(inputBytes.length, length));
-
-        // Add padding if necessary
-        for (int i = inputBytes.length; i < length; i++) {
-            byteArray[i] = (byte) ' ';
-        }
-
-        return byteArray;
-    }
 
 
     public static void clear() {

@@ -11,7 +11,7 @@ public abstract class PostingList{
     protected static final String TEMP_FREQ_DIR ="/invertedIndex/temp/frequencies";
     protected BlockDescriptor blockDescriptor;
     protected LexiconEntry lexiconEntry;
-    protected int currentIndexPostings;
+    protected int currentIndexPostings;         //Used while performing query processing
 
 
     public static UncompressedPostingList readFromDisk(int partition, int docIdOffset, int frequencyOffset, boolean compressed) throws FileNotFoundException{
@@ -21,6 +21,10 @@ public abstract class PostingList{
     }
 
     public abstract void add(int docId, int frequency);
+
+    public abstract int[] writeOnDisk(FileChannel docStream, FileChannel freqStream, int[] offsets) throws IOException;
+
+    /* ---------------- FUNCTION USED FOR QUERY PROCESSOR -------------- */
 
     /**
      * Retrieves the current document ID from the PostingList.
@@ -52,5 +56,5 @@ public abstract class PostingList{
         return lexiconEntry.getScoreTermUpperBound();
     }
 
-    public abstract int[] writeOnDisk(FileChannel docStream, FileChannel freqStream, int[] offsets) throws IOException;
+    /* ---------------- FUNCTION USED FOR QUERY PROCESSOR -------------- */
 }

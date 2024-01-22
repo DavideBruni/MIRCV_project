@@ -20,18 +20,19 @@ public class Scorer {
      *
      * @param tf     The term frequency (number of occurrences) of the term in the document.
      * @param docId  The identifier of the document.
-     * @param idf    The inverse document frequency of the term.
+     * @param df     The document frequency of the term.
      * @return The BM25 score for the term in the specified document.
      */
-    public static double BM25_singleTermDocumentScore(int tf, int docId, double idf) throws DocumentNotFoundException,ArithmeticException {
+    public static double BM25_singleTermDocumentScore(int tf, int docId, double df) throws DocumentNotFoundException,ArithmeticException {
         int documentLength = DocumentIndex.getDocumentLength(docId);
+        double idf = Math.log10(CollectionStatistics.getCollectionSize() / df);
         double averageDocumentLength = CollectionStatistics.getAverageDocumentLength();
         double Bj = NORMALIZATION_OPPOSITE_B + (NORMALIZATION_PARAMETER_B*(documentLength/averageDocumentLength));
         return (tf / ((NORMALIZATION_PARAMETER_K1*Bj) + tf)) * idf;
     }
 
-    public static double TFIDF_singleTermDocumentScore(int tf, double idf) {
-        return (1+ Math.log10(tf))*idf;
+    public static double TFIDF_singleTermDocumentScore(int tf, double df) {
+        return (1+ Math.log10(tf))*(Math.log10(CollectionStatistics.getCollectionSize() / df));
     }
 
     public static double[] calculateTermUpperBounds(UncompressedPostingList postingList, double idf){

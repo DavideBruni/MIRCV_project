@@ -15,16 +15,22 @@ import java.nio.file.StandardOpenOption;
 public class CollectionStatistics {
 
     private static int collectionSize;      // size of the collection (number of documents)
-
     private static long documentsLen;       // sum of the length of the docs
-
     private static long numberOfTokens;      // size of the lexicon
 
     public static void updateDocumentsLen(int size) { documentsLen += size;}
 
     public static void updateCollectionSize() { collectionSize++; }
 
-    public static int getCollectionSize(){ return collectionSize;}
+    public static int getCollectionSize(){return collectionSize;}
+
+    public static void updateNumberOfToken(long value) {
+        numberOfTokens = numberOfTokens + value;
+    }
+
+    public static long getNumberOfTokens() { return numberOfTokens; }
+
+    public static double getAverageDocumentLength() { return documentsLen/(double)collectionSize;}
 
     public static void writeToDisk() {
         try {
@@ -54,20 +60,9 @@ public class CollectionStatistics {
         }
     }
 
-
-
-    public static void updateNumberOfToken(long value) {
-        numberOfTokens = numberOfTokens + value;
-    }
-
-    public static long getNumberOfTokens() { return numberOfTokens; }
-
-
     public static void print() {
         System.out.println("CollectionStatistics:\n size: "+collectionSize+
                 "\n documentsLen: "+documentsLen+
                 "\n: numberOfTokens: "+numberOfTokens);
     }
-
-    public static double getAverageDocumentLength() { return documentsLen/(double)collectionSize;}
 }

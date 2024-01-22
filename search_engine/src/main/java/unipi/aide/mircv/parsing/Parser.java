@@ -3,9 +3,12 @@ package unipi.aide.mircv.parsing;
 import ca.rmen.porterstemmer.PorterStemmer;
 import unipi.aide.mircv.exceptions.PidNotFoundException;
 import unipi.aide.mircv.log.CustomLogger;
+import unipi.aide.mircv.model.Lexicon;
 import unipi.aide.mircv.model.ParsedDocument;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -20,8 +23,15 @@ public class Parser {
     private static final String STOPWORDS_STRING_PATH = "utils/stopwords.txt";
     private static List<String> stopwords;
 
-    // This method tokenizes the input text and performs various text processing operations based on the 'parseFlag'.
-    public static List<String> getTokens(String text, boolean parseFlag) {
+    /**
+     * Tokenizes the input text into a list of strings based on specified processing steps.
+     *
+     * @param text       The input text to be tokenized.
+     * @param parseFlag  A flag indicating whether additional processing steps (stopwords filtering and stemming) should be applied.
+     * @return           A List of strings representing the tokens extracted from the input text.
+     * @throws UnsupportedEncodingException If the text contains invalid UTF-8 characters and cannot be properly encoded.
+     */
+    public static List<String> getTokens(String text, boolean parseFlag) throws UnsupportedEncodingException {
         Pattern pattern = Pattern.compile("[^\\x00-\\x7F]+");       // this regex match all the invalid UTF-8 char
         text = text.replaceAll("<[^>]+>", " "); // Remove HTML
 
@@ -35,7 +45,7 @@ public class Parser {
 
         for (String word : words) {
             // url are not considered and too long words (probably errors are not considered)
-            if (!word.isEmpty() && word.length() < 46) {
+            if (!word.isEmpty() && word.getBytes(StandardCharsets.UTF_8).length < Lexicon.TERM_DIMENSION) {
                 Matcher matcher = pattern.matcher(word);
                 if(matcher.find()){
                     continue;
@@ -108,7 +118,7 @@ public class Parser {
                 .collect(Collectors.toList());
     }
 
-    public static ParsedDocument parseDocument(String text, boolean parseFlag) throws PidNotFoundException {
+    public static ParsedDocument parseDocument(String text, boolean parseFlag) throws PidNotFoundException, UnsupportedEncodingException {
         String regex = "\\d+\\t";       // regex to find a sequence of number followed by a tab (our pid)
 
         Pattern pattern = Pattern.compile(regex);
