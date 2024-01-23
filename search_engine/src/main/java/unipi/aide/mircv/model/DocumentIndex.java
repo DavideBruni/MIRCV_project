@@ -51,12 +51,13 @@ public class DocumentIndex {
      * Reads document lengths from disk and populates the index.
      */
     public static void loadFromDisk(){
+        int numEntries = CollectionStatistics.getCollectionSize();
         try(FileChannel stream = (FileChannel) Files.newByteChannel(Path.of(Configuration.getDocumentIndexPath() + FILE_NAME), StandardOpenOption.READ)){
-            ByteBuffer buffer = ByteBuffer.allocateDirect(Integer.BYTES * CollectionStatistics.getCollectionSize());
+            ByteBuffer buffer = ByteBuffer.allocateDirect(Integer.BYTES * numEntries);
             stream.read(buffer);
             buffer.flip();
-            for(int i : index){
-                index.add(buffer.getInt(i));
+            for(int i = 0; i< numEntries; i++){
+                index.add(buffer.getInt());
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

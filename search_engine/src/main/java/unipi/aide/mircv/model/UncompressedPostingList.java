@@ -135,6 +135,7 @@ public class UncompressedPostingList extends PostingList{
             res = new UncompressedPostingList(docIds,frequencies,firstBlockDescriptor);
             res.lexiconEntry = lexiconEntry;
         }catch (IOException e){
+            CustomLogger.error("Erro while loading posting list from Disk");
         }
         return res;
     }

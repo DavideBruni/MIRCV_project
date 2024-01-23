@@ -118,9 +118,9 @@ public class EliasFano {
 	public static int getCompressedSize(final int u, final int length) {
 		// In my implementation highBits array starts in a new byte, in the worst case I waste 7 bit
 		// but the read/write operation are simpler to implement
-		final int l = getL(u, length);
-		final long numLowBits = roundUp(l * length);
-		final long numHighBits = roundUp(2 * length);			//2nlog2(n)
+		final int l = getL(u+1, length);		//+1 in order to handle the particular case where length = u
+		final long numLowBits = roundUp((long) l * length);
+		final long numHighBits = roundUp(2L * length);			//2nlog2(n)
 		return (int) ((numLowBits + numHighBits) / Byte.SIZE);		//how many byte, it's always an integer since the numerator is a multiple of Byte.SIZE
 	}
 
@@ -146,14 +146,18 @@ public class EliasFano {
 		long highBitsCached = cache.getHighBitsOffset();
 		int numberOfDocIdsCached = cache.getNumberOfDocIdsCached();
 		int currentHighBitNumberCached = cache.getCurrentHighBitNumber();
-		long highBitsOffset = highBitsCached == -1 ? roundUp(l * length) : highBitsCached;
+		long highBitsOffset = highBitsCached == -1 ? roundUp((long) l * length) : highBitsCached;
 
-		final int low = Bits.readBinary(in, l * idx, l);		// read the low part (I know che exact position, since I know l)
+		final int low = Bits.readBinary(in, (long) l * idx, l);		// read the low part (I know che exact position, since I know l)
 		int currentHighBitNumber = currentHighBitNumberCached;
-		int howMany;									// how many of the same highPart I have
+		int howMany = 0;									// how many of the same highPart I have
 		int numberOfDocIds = numberOfDocIdsCached == -1 ? 0 : numberOfDocIdsCached;
 		while(numberOfDocIds < idx + 1){
-			howMany = Bits.readUnary(in, highBitsOffset);
+			try {
+				howMany = Bits.readUnary(in, highBitsOffset);
+			}catch (IndexOutOfBoundsException ie){
+				System.out.println("ss");
+			}
 			highBitsOffset += howMany + 1;
 			numberOfDocIds += howMany;
 			currentHighBitNumber++;

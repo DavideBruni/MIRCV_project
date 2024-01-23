@@ -8,8 +8,8 @@ public class BlockDescriptor {
     private final int maxDocId;
     private final int numberOfPostings;
     // only the previous value are written in the documentIds file on disk
-    private final int nextFrequenciesOffset;    // Faster way to get the exact size of frequencies block
-    private final int indexNextBlockDocIds;     // Faster way to get the exact size of docIds block
+    private int nextFrequenciesOffset;    // Faster way to get the exact size of frequencies block
+    private int indexNextBlockDocIds;     // Faster way to get the exact size of docIds block
 
     public BlockDescriptor(BlockDescriptor blockDescriptor) {
         maxDocId = blockDescriptor.maxDocId;
@@ -77,5 +77,11 @@ public class BlockDescriptor {
 
     public int getIndexNextBlockFrequencies() {
         return nextFrequenciesOffset;
+    }
+
+    // USED FOR TESTING PURPOSE ONLY!
+    public void setIndexes(int compressedSize, int byteSizeInUnary) {
+        indexNextBlockDocIds = compressedSize;
+        nextFrequenciesOffset = byteSizeInUnary;
     }
 }

@@ -13,7 +13,7 @@ public class UnaryCompressor {
      * @return The size, in bytes, required for the unary encoding of the given list of frequencies.
      *         If the calculated size is 0, it is adjusted to 1 to represent at least one byte.
      */
-    private static int getByteSizeInUnary(List<Integer> frequencies) {
+    public static int getByteSizeInUnary(List<Integer> frequencies) {
         // Calculate the sum of list elements
         int sum = frequencies.stream().mapToInt(Integer::intValue).sum();
         // Consider n 0s (one for each element)

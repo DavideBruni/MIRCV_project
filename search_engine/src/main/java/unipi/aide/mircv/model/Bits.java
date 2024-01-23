@@ -70,7 +70,7 @@ public final class Bits {
 			final int byteOffset = (int) (bitOffset / Byte.SIZE);
 			final int bitPosition = (int) (bitOffset % Byte.SIZE);
 			final int availableSpace = Byte.SIZE - bitPosition;
-			final int bitToWrite = (int) Math.min(val, availableSpace);
+			final int bitToWrite = Math.min(val, availableSpace);
 			final int positionLast1 = Byte.SIZE - bitToWrite; //I want the 1s in leading position: how many 0s I have at the end
 			final int ones = 0b11111111 & (0b11111111 << positionLast1);	//shift in order to have bitToWrite 1s in leading position
 
