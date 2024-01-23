@@ -49,10 +49,10 @@ public class UnaryCompressor {
      * @return A list of integers representing the decompressed frequencies.
      * @see Bits#readUnary(byte[], long)
      */
-    public static List<Integer> decompressFrequencies(byte [] compressedFrequencies) {
+    public static List<Integer> decompressFrequencies(byte [] compressedFrequencies, int numberOfPostings) {
         List<Integer> frequencies = new ArrayList<>();
         long bitsOffset = 0;
-        for(int i = 0; i<compressedFrequencies.length; i++){
+        for(int i = 0; i<numberOfPostings; i++){
             int number = Bits.readUnary(compressedFrequencies,bitsOffset);
             frequencies.add(number);
             bitsOffset += number + 1;
@@ -76,14 +76,9 @@ public class UnaryCompressor {
      */
     public static long[] get(byte[] compressedIds, int index, int lastReadFrequency, long currentFrequencyIndex) {
         int number = 0;
-        // I need double loop since can I had skipped some docIds so the last frequency I read is different from the previous
-        // element in the array
         for(; lastReadFrequency<index; lastReadFrequency++) {       // from lastDecompressNumber, to the actual one
-            number = 0;
-            for (; currentFrequencyIndex<compressedIds.length; currentFrequencyIndex++) {
-                number = Bits.readUnary(compressedIds,currentFrequencyIndex);
-                currentFrequencyIndex += number + 1;
-            }
+            number = Bits.readUnary(compressedIds,currentFrequencyIndex);
+            currentFrequencyIndex += number + 1;
         }
         return new long[] {number,currentFrequencyIndex};
     }

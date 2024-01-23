@@ -31,10 +31,24 @@ public class Scorer {
         return (tf / ((NORMALIZATION_PARAMETER_K1*Bj) + tf)) * idf;
     }
 
+    /**
+     * Calculates the TF-IDF score for a single term in a document.
+     *
+     * @param tf The term frequency (number of occurrences) of the term in the document.
+     * @param df The document frequency (number of documents containing the term) of the term.
+     * @return The TF-IDF score for the term in the document.
+     */
     public static double TFIDF_singleTermDocumentScore(int tf, double df) {
         return (1+ Math.log10(tf))*(Math.log10(CollectionStatistics.getCollectionSize() / df));
     }
 
+    /**
+     * Calculates the upper bounds of BM25 and TF-IDF scores for a term in a collection of documents.
+     *
+     * @param postingList The uncompressed posting list for the term.
+     * @param idf The inverse document frequency (IDF) of the term.
+     * @return An array containing the maximum BM25 score and the maximum TF-IDF score for the term in the collection.
+     */
     public static double[] calculateTermUpperBounds(UncompressedPostingList postingList, double idf){
         double BM25_maxScore = 0.0;
         double TFIDF_maxScore = 0.0;
@@ -62,13 +76,14 @@ public class Scorer {
      * Computes the maximum scores for a set of posting lists using the MAX-SCORE algorithm.
      * The method returns a priority queue containing DocScorePair objects representing
      * the documents with the highest scores.
+     * Array of PostingList must be provided sorted by term upper bounds in ascending order.
      *
-     * @param postingLists An array of posting lists sorted by upper bound in ascending order.
-     * @param conjunctiveQuery A boolean indicating whether the query is conjunctive or not.
-     * @return A priority queue of DocScorePair objects sorted by descending scores.
-     *         The queue contains the documents with the highest scores, limited by the configured minHeapSize.
+     * @param postingLists          An array of posting lists sorted by upper bound in ascending order.
+     * @param conjunctiveQuery      A boolean indicating whether the query is conjunctive or not.
+     * @return                      A priority queue of (minHeapSize) DocScorePair objects sorted by descending scores.
      */
     public static PriorityQueue<DocScorePair> maxScore(PostingList[] postingLists, boolean conjunctiveQuery) {
+        /* --------------- Initialize structures and doc upper bounds --------------- */
         PriorityQueue<DocScorePair> q = new PriorityQueue<>();
         int minHeapSize = Configuration.getMinheapDimension();
         double[] upperBounds = new double[postingLists.length];
@@ -77,69 +92,87 @@ public class Scorer {
         for (int i = 1; i < postingLists.length; i++) {
             upperBounds[i] = upperBounds[i - 1] + postingLists[i].getTermUpperBound();      //necessary to understand if the posting list is essential or not
         }
-
+        /* -------------------------------------------------------------------------- */
         double theta = 0;
         int pivot = 0;
+        int idToSkip = -1;      //using only for conjuctive query
         int current = minimumDocid(postingLists);
 
         while (pivot < postingLists.length && current != Integer.MAX_VALUE) {
             double score = 0;
             int next = Integer.MAX_VALUE;
-
-            for (int i = pivot; i <postingLists.length; i++) { // Essential lists
+            /* --------------- Essential posting list  --------------- */
+            for (int i = pivot; i <postingLists.length; i++) {
                 if (postingLists[i].docId() == current) {
                     score += postingLists[i].score();
                     postingLists[i].next();
+                /* ------------------------ CONJUCTIVE PART ------------------------*/
                 } else if (conjunctiveQuery) {      // we have a postingList without the doc with minDocIdUsed
-                    current = -1;       // we don't have to consider this document anymore
-                    score = 0;
-                }
-                if(conjunctiveQuery && current!=-1) {
-                    postingLists[i].next();
-                }
-                next = Math.min(next, postingLists[i].docId());
-            }
-
-            for (int i = pivot - 1; i >= 0; i--) { // Non-essential lists
-                if (score + upperBounds[i] <= theta) {
-                    break;
-                }
-                postingLists[i].nextGEQ(current);
-                if (postingLists[i].docId() == current) {
-                    score += postingLists[i].score();
-                } else if (conjunctiveQuery) {
-                    break;
-                }
-            }
-
-            if (q.add(new DocScorePair(current, score))) { // List pivot update
-                if (q.size() > minHeapSize) {
-                    q.poll();
-                }
-                if (q.size() == minHeapSize) {
-                    if (q.peek() != null) {
-                        theta = q.peek().getScore();
+                    if(current != -1) {             // first document that doesn't have currentId
+                        idToSkip = current;         // we don't have to consider this document anymore
+                        current = -1;
+                        score = 0;
+                    }else{
+                        //if the current posting has a docId = idToSkip --> skip it using next()
+                        if(postingLists[i].docId() == idToSkip){
+                            postingLists[i].next();
+                        }
                     }
                 }
-
-                while (pivot < postingLists.length && upperBounds[pivot] <= theta) {
-                    pivot++;
+                /* ----------------------------------------------------------------*/
+                next = Math.min(next, postingLists[i].docId());
+            }
+            /* -------------------------------------------------------- */
+            if(current > 0) {       //in conjuctive mode, I have to skip to next doc if current == -1
+                /* --------------- Non-Essential posting list  --------------- */
+                for (int i = pivot - 1; i >= 0; i--) {
+                    if (score + upperBounds[i] <= theta) {
+                        break;
+                    }
+                    postingLists[i].nextGEQ(current);
+                    if (postingLists[i].docId() == current) {
+                        score += postingLists[i].score();
+                    } else if (conjunctiveQuery) {
+                        break;
+                    }
+                }
+                /* --------------- Add result to priority queue --------------- */
+                if (q.add(new DocScorePair(current, score))) {
+                    if (q.size() > minHeapSize) {       //if size more than minHeapSize, remove the one with the smallest score
+                        q.poll();
+                    }
+                    if (q.size() == minHeapSize) {      //get theta
+                        if (q.peek() != null) {
+                            theta = q.peek().getScore();
+                        }
+                    }
+                    /* --------------- Pivot updating --------------- */
+                    while (pivot < postingLists.length && upperBounds[pivot] <= theta) {
+                        pivot++;
+                    }
                 }
             }
             current = next;
         }
 
+        /* ------- Reverse the order since I want to return the result in decreasing order of score --------- */
         PriorityQueue<DocScorePair> reversedQueue = new PriorityQueue<>(q.size(), Comparator.reverseOrder());
         reversedQueue.addAll(q);
         return reversedQueue;
     }
 
+    /**
+     * Utility function that finds and returns the minimum document ID among a set of posting lists.
+     *
+     * @param postingLists  An array of PostingList objects.
+     * @return              The minimum document ID present in the given posting lists.
+     *                      Returns Integer.MAX_VALUE if the posting lists are empty.
+     */
     private static int minimumDocid(PostingList[] postingLists) {
         int minDocid = Integer.MAX_VALUE;
         for (PostingList postingList : postingLists) {
-            if (postingList.docId() < minDocid) {
-                minDocid = postingList.docId();
-            }
+            int id = postingList.docId();
+            minDocid = Math.min(id,minDocid);
         }
         return minDocid;
     }

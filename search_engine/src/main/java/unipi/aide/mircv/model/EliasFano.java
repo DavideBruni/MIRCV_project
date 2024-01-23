@@ -142,21 +142,21 @@ public class EliasFano {
 		/* I recover values from EliasFanoCache in order to avoid the decompression of the first part of high bit
 		 *	numbers if I have already done
 		 */
+
 		long highBitsCached = cache.getHighBitsOffset();
 		int numberOfDocIdsCached = cache.getNumberOfDocIdsCached();
 		int currentHighBitNumberCached = cache.getCurrentHighBitNumber();
 		long highBitsOffset = highBitsCached == -1 ? roundUp(l * length) : highBitsCached;
 
 		final int low = Bits.readBinary(in, l * idx, l);		// read the low part (I know che exact position, since I know l)
-		int currentHighBitNumber = currentHighBitNumberCached == -1 ? 0 : currentHighBitNumberCached;
+		int currentHighBitNumber = currentHighBitNumberCached;
 		int howMany;									// how many of the same highPart I have
 		int numberOfDocIds = numberOfDocIdsCached == -1 ? 0 : numberOfDocIdsCached;
 		while(numberOfDocIds < idx + 1){
 			howMany = Bits.readUnary(in, highBitsOffset);
 			highBitsOffset += howMany + 1;
 			numberOfDocIds += howMany;
-			if(numberOfDocIds < idx + 1)
-				currentHighBitNumber++;
+			currentHighBitNumber++;
 		}
 		cache.setCache(highBitsOffset,numberOfDocIds,currentHighBitNumber);
 		return (currentHighBitNumber << l) | low;

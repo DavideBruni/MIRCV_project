@@ -113,7 +113,7 @@ public class CompressedPostingList extends PostingList {
             frequenciesBuffer.flip();
             buffer = new byte[len];
             frequenciesBuffer.get(buffer);
-            List<Integer> freqs = UnaryCompressor.decompressFrequencies(buffer);
+            List<Integer> freqs = UnaryCompressor.decompressFrequencies(buffer, blockDescriptor.getNumberOfPostings());
             // -------------------------- End of reading frequencies --------------------------
             res = new UncompressedPostingList(documentIds,freqs,blockDescriptor);
 
@@ -327,8 +327,8 @@ public class CompressedPostingList extends PostingList {
                         /* -------------------------------------------------- */
                         if(blockDescriptor.getMaxDocId() >=docId){
                             currentIndexPostings = 0;
-                            nextGEQ(docId);
                             resetIndexes();
+                            nextGEQ(docId);
                             break;
                         }
                 }

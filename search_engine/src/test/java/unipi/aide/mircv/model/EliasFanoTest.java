@@ -57,7 +57,7 @@ class EliasFanoTest {
         int l = EliasFano.getL(10001, 4);
         byte [] expected = new byte[]{ 64, 4, 1, 113, 7, 17, -52};
         byte [] compressed = new byte[EliasFano.getCompressedSize(10001, 4)];
-        long highBitsOffset = EliasFano.roundUp(l * 4);
+        long highBitsOffset = EliasFano.roundUp(l * 4L);
         EliasFano.compress(integerList,compressed,l,highBitsOffset);
         assertArrayEquals(expected,compressed);
     }
@@ -80,7 +80,7 @@ class EliasFanoTest {
         int l = EliasFano.getL(512, 11);
         byte [] expected = new byte[]{ 4, 32, -60, 20, 97, -56, 36, -96, 0, -1, -64, 32};
         byte [] compressed = new byte[res];
-        long highBitsOffset = EliasFano.roundUp(l * 11);
+        long highBitsOffset = EliasFano.roundUp(l * 11L);
         EliasFano.compress(integerList,compressed,l,highBitsOffset);
         assertArrayEquals(expected,compressed);
     }
@@ -127,11 +127,6 @@ class EliasFanoTest {
 
     @Test
     void getCompressedSize() {
-        List<Integer> integerList = new ArrayList<>();
-        integerList.add(5);
-        integerList.add(8);
-        integerList.add(9);
-        integerList.add(12);
         int res = EliasFano.getCompressedSize(12,4);
         assertEquals(2,res);
     }
