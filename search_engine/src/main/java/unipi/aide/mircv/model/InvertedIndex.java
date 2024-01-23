@@ -62,7 +62,7 @@ public class InvertedIndex {
                         /* ---------------- SET UP DOCUMENT INDEX AND COLLECTION STATISTICS -------------- */
                         int docLen = tokens.size();
                         // adding documentLen (number of tokens)
-                        // Note: docno = docId, since all the docNo in our collection are integers from 1 to 8Milions
+                        // Note: docno + 1 = docId, since all the docNo in our collection are integers from 0 to 8Milions
                         DocumentIndex.add(docLen);
                         //update collection statistics
                         CollectionStatistics.updateDocumentsLen(docLen);

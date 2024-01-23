@@ -80,6 +80,6 @@ public class DocumentIndex {
     }
 
     public static String getDocno(int docid) {
-        return String.valueOf(docid);
+        return String.valueOf(docid - 1);
     }
 }

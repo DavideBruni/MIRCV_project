@@ -74,9 +74,9 @@ public class Parser {
         for (int j = 1; j < token.length(); j++) {
             currentChar = token.charAt(j);
 
-            if (Character.isDigit(currentChar) == Character.isDigit(prevChar) && currentChar == prevChar) {
+            if (currentChar == prevChar) {
                 consecutiveCount++;
-                if (consecutiveCount <= 2) {
+                if (Character.isDigit(currentChar) || consecutiveCount <= 2) {
                     result.append(currentChar);
                 }
             } else {
