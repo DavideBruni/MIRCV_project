@@ -60,7 +60,7 @@ public class QueryProcessorMain {
                 if (query.trim().charAt(0) == '+')      //conjuctive condition
                     is_cunjuctive = true;
                 long timestamp_start = System.currentTimeMillis();
-                List<String> parsedQuery = null;
+                List<String> parsedQuery;
                 try {
                     parsedQuery = Parser.getTokens(query, parse);
                 } catch (UnsupportedEncodingException e) {
@@ -88,7 +88,6 @@ public class QueryProcessorMain {
     }
 
     private static void evaluation(boolean parse) {
-        List<String> results = new ArrayList<>();
         List<Long> times = new ArrayList<>();
         String filename = "qres_"+Configuration.getScoreStandard()+"_";
         if (parse)
@@ -140,7 +139,7 @@ public class QueryProcessorMain {
     private static PostingList[] getPostingLists(List<String> terms) {
         List<PostingList> postingLists = new ArrayList<>();
         for(String term : terms){
-            PostingList postingList = null;
+            PostingList postingList;
             try {
                 postingList = PostingList.loadFromDisk(term);
             } catch (IOException e) {
@@ -171,6 +170,7 @@ public class QueryProcessorMain {
             Comparator<PostingList> termUpperBoundComparator = Comparator.comparing(PostingList::getTermUpperBound);
             Arrays.sort(postingLists, termUpperBoundComparator);
             queryResult = Scorer.maxScore(postingLists, is_conjunctive);
+            Lexicon.clear();
         }
         return queryResult;
     }
