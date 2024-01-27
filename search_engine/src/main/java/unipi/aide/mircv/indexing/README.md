@@ -12,8 +12,6 @@
 
 6. **Logging Duration and Collection Statistics:** The program logs the time taken to create the index and prints the collection statistics, including information about the indexed documents.
 
-## Command Line Example
-
 ## Notes
 The class utilizes the Apache Commons Compress library for handling tar.gz files.
 
