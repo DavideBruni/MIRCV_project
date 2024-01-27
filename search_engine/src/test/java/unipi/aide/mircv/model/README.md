@@ -4,7 +4,7 @@ Here are presents only the tests performed with JUnit. Other tests were not perf
 
 - Simple functions: just read the code to understand its correctness. These functions mostly call other functions, like an orchestrator.
 
--Read and write operations and more complex functions: tested by running the code (and the debugger provided by IntelliJ) with different collection sizes, first with collections containing a few documents, then gradually increasing the size until reaching the complete collection.
+- Read and write operations and more complex functions: tested by running the code (and the debugger provided by IntelliJ) with different collection sizes, first with collections containing a few documents, then gradually increasing the size until reaching the complete collection.
 
 ## BitsTest Class
 
