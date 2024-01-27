@@ -52,10 +52,10 @@ The `PostingsListsTest` class is designed to test the functionalities related to
 
 The `UnaryCompressorTest` class is focused on testing the functionalities of the unary compressor. It includes the following test methods:
 
-- **getByteSizeInUnary Test:** Tests the `getByteSizeInUnary` function.
+- **getByteSizeInUnaryTest:** Tests the `getByteSizeInUnary` function.
 
-- **compress Test:** Evaluates the `compress` function.
+- **compressTest:** Evaluates the `compress` function.
 
-- **decompressFrequencies Test:** Tests the `decompressFrequencies` function.
+- **decompressFrequenciesTest:** Tests the `decompressFrequencies` function.
 
-- **get Test:** Includes various tests on the `get` method.
+- **getTest:** Includes various tests on the `get` method.
