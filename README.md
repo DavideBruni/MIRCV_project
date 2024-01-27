@@ -1,7 +1,7 @@
 # MIRCV_project 📃
 
 ## Description 📚
-This project is the realization of a search engine for the Multimedia Information Retrieval and Computer Vision course within the Master's program in Artificial Intelligence and Data Engineering at the University of Pisa for the academic year 2023/2024.
+This project is the realization of a search engine for the Multimedia Information Retrieval and Computer Vision course within the Master's program in Artificial Intelligence and Data Engineering at the University of Pisa for the academic year 2023/2024. <br> In this repository, you will find (in almost) all the folders a README.md file containing details about the classes present inside.
 
 ## JDK Version ☕
 The project has been developed using JDK 19.
